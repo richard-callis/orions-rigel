@@ -127,6 +127,18 @@ cost-based, not rule-based. The *shape* of the plan is the teaching point;
 real timing differences show up at real data volumes. Module 3 goes much
 deeper on reading these plans.
 
+<Quiz
+  id="what-does-an-index-speed-up"
+  question="An index on orders.customer_id primarily speeds up which of these?"
+  options={[
+    "INSERT statements into orders",
+    "Looking up all orders for a given customer_id",
+    "ALTER TABLE orders",
+    "Every query against the orders table equally",
+  ]}
+  answer={1}
+/>
+
 ---
 
 ## 1.3 Fast recap query (5–10 min, optional)

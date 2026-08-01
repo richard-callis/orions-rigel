@@ -3,6 +3,7 @@ import { getModule } from "@/lib/content";
 import { splitIntoSlides } from "@/lib/slides";
 import { Lesson } from "@/components/mdx/lesson";
 import { SlideDeck } from "@/components/present/slide-deck";
+import { auth } from "@/lib/auth";
 
 type Props = {
   params: Promise<{ course: string; module: string }>;
@@ -20,10 +21,19 @@ export default async function PresentPage({ params }: Props) {
   const mod = getModule(courseSlug, moduleSlug);
   if (!mod) notFound();
 
+  const session = await auth();
+  const isInstructor = session?.user?.role === "INSTRUCTOR";
+
   const chunks = splitIntoSlides(mod.content);
   const slideProse = "prose prose-invert prose-lg md:prose-xl max-w-none prose-headings:font-semibold";
   const slides = chunks.map((chunk, i) => (
-    <Lesson key={i} content={chunk} proseClassName={slideProse} />
+    <Lesson
+      key={i}
+      content={chunk}
+      proseClassName={slideProse}
+      courseSlug={courseSlug}
+      moduleSlug={moduleSlug}
+    />
   ));
 
   return (
@@ -31,6 +41,9 @@ export default async function PresentPage({ params }: Props) {
       slides={slides}
       title={mod.meta.title}
       exitHref={`/courses/${courseSlug}/${moduleSlug}`}
+      courseSlug={courseSlug}
+      moduleSlug={moduleSlug}
+      isInstructor={isInstructor}
     />
   );
 }

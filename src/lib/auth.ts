@@ -32,10 +32,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
         token.role = (user as { role?: string }).role;
+      }
+      // Lets client code call the `update()` handle from useSession() to
+      // refresh the token without a full re-login — used by the instructor
+      // role toggle.
+      if (trigger === "update" && session?.role) {
+        token.role = session.role;
       }
       return token;
     },

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getCourses, getCourseModules } from "@/lib/content";
+import { RoleToggle } from "@/components/role-toggle";
 
 export const metadata = { title: "Dashboard · Technical Training" };
 
@@ -24,10 +25,15 @@ export default async function DashboardPage() {
 
   return (
     <div className="w-full mx-auto max-w-3xl px-4 py-12">
-      <h1 className="text-3xl font-semibold tracking-tight mb-1">
-        Welcome back, {session.user.name?.split(" ")[0]}
-      </h1>
-      <p className="text-foreground-secondary mb-10">Here&apos;s where you left off.</p>
+      <div className="mb-10 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight mb-1">
+            Welcome back, {session.user.name?.split(" ")[0]}
+          </h1>
+          <p className="text-foreground-secondary">Here&apos;s where you left off.</p>
+        </div>
+        <RoleToggle />
+      </div>
 
       <div className="space-y-4">
         {courses.map((course) => {
