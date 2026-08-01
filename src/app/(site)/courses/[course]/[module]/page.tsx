@@ -86,7 +86,7 @@ export default async function ModulePage({ params }: Props) {
         </div>
       </div>
 
-      <Lesson content={mod.content} />
+      <Lesson content={mod.content} courseSlug={courseSlug} moduleSlug={moduleSlug} />
 
       <div className="mt-10 flex items-center justify-between border-t border-border pt-6 text-sm">
         {prev ? (
