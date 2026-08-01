@@ -1,0 +1,213 @@
+---
+title: "Cheat Sheet"
+description: "One-page syntax reference to keep open while you work."
+level: "reference"
+---
+## Query execution order (how to read any query)
+
+```
+FROM/JOIN  →  WHERE  →  GROUP BY  →  HAVING  →  SELECT  →  DISTINCT  →  ORDER BY  →  LIMIT
+```
+(Note: this is the *logical* order the database reasons about, not the
+order you type it in — you type `SELECT ... FROM ... WHERE ...`.)
+
+## Filtering
+
+| Syntax | Meaning |
+|---|---|
+| `WHERE col = x` | equals |
+| `WHERE col <> x` / `!= x` | not equals |
+| `WHERE col BETWEEN a AND b` | inclusive range |
+| `WHERE col IN (a, b, c)` | matches any in list |
+| `WHERE col LIKE '%text%'` | pattern match (`%`=any chars, `_`=one char) |
+| `WHERE col IS NULL` / `IS NOT NULL` | NULL check — never use `= NULL` |
+| `WHERE a AND (b OR c)` | use parentheses, don't rely on precedence |
+
+## Aggregates
+
+`COUNT(*)`, `COUNT(col)` (ignores NULLs), `SUM()`, `AVG()`, `MIN()`, `MAX()`
+
+```sql
+SELECT col, COUNT(*) FROM t GROUP BY col HAVING COUNT(*) > 1;
+```
+Rule: non-aggregated `SELECT` columns must be in `GROUP BY`.
+Rule: filter rows with `WHERE`, filter groups with `HAVING`.
+
+## Joins
+
+```sql
+FROM a JOIN b ON a.id = b.a_id            -- INNER: matches only
+FROM a LEFT JOIN b ON a.id = b.a_id       -- all of a, matched or not
+FROM a RIGHT JOIN b ON a.id = b.a_id      -- all of b, matched or not
+FROM a FULL OUTER JOIN b ON a.id = b.a_id -- all of both
+FROM a CROSS JOIN b                       -- every combination
+FROM employees e JOIN employees m ON e.manager_id = m.employee_id  -- self join
+```
+"Find X with no matching Y": `LEFT JOIN` + `WHERE right.key IS NULL`.
+
+## Subqueries
+
+```sql
+WHERE col > (SELECT AVG(col) FROM t)                 -- scalar
+WHERE id IN (SELECT id FROM t2 WHERE ...)             -- IN
+WHERE EXISTS (SELECT 1 FROM t2 WHERE t2.id = t.id)     -- EXISTS (prefer over NOT IN)
+```
+Avoid `NOT IN (subquery)` if the subquery can return `NULL` — use `NOT EXISTS`.
+
+## CASE
+
+```sql
+CASE WHEN cond1 THEN 'a' WHEN cond2 THEN 'b' ELSE 'c' END
+COUNT(CASE WHEN cond THEN 1 END)   -- conditional count
+```
+
+## Window functions
+
+```sql
+ROW_NUMBER() OVER (PARTITION BY col ORDER BY col2 DESC)
+RANK()       OVER (...)   -- skips after ties (1,2,2,4)
+DENSE_RANK() OVER (...)   -- no skip (1,2,2,3)
+SUM(x) OVER (ORDER BY date)                      -- running total
+LAG(col)  OVER (PARTITION BY id ORDER BY date)   -- previous row's value
+LEAD(col) OVER (PARTITION BY id ORDER BY date)   -- next row's value
+NTILE(4) OVER (ORDER BY revenue DESC)            -- split into 4 buckets
+```
+Top-N-per-group pattern:
+```sql
+SELECT * FROM (
+  SELECT *, ROW_NUMBER() OVER (PARTITION BY grp ORDER BY val DESC) AS rn
+  FROM t
+) x WHERE rn <= n;
+```
+
+## CTEs
+
+```sql
+WITH step1 AS (SELECT ...),
+     step2 AS (SELECT ... FROM step1 ...)
+SELECT ... FROM step2;
+
+WITH RECURSIVE tree AS (
+  SELECT ... WHERE parent_id IS NULL         -- anchor
+  UNION ALL
+  SELECT e.* FROM t e JOIN tree ON e.parent_id = tree.id   -- recursive step
+)
+SELECT * FROM tree;
+```
+
+## Keys & relationships
+
+- **PK**: uniquely identifies a row, never `NULL`, never repeats.
+- **FK**: must match a PK in the referenced table (or be `NULL`).
+- **1:N**: FK lives on the "many" side (`orders.customer_id`).
+- **Self-referencing 1:N** (hierarchy): FK references its own table
+  (`employees.manager_id`).
+- **M:N**: modeled with a **junction table** holding FKs to both sides
+  (`order_items` links `orders` ↔ `products`).
+
+## Date & time functions
+
+```sql
+EXTRACT(YEAR FROM col)                  -- pull one field out
+DATE_TRUNC('month', col)                -- round down to start of unit — group-by-month, sortable
+col + INTERVAL '30 days'                -- date arithmetic
+generate_series(start, end, '1 day')    -- scaffold a full calendar, then LEFT JOIN real data onto it
+```
+Sargable range beats a wrapped column for index use:
+```sql
+WHERE order_date >= '2023-01-01' AND order_date < '2024-01-01'   -- good
+WHERE EXTRACT(YEAR FROM order_date) = 2023                        -- can't use a plain index
+```
+
+## Set operations
+
+`UNION` (dedupe), `UNION ALL` (keep dupes, faster), `INTERSECT`, `EXCEPT`
+
+## DML
+
+```sql
+INSERT INTO t (col1, col2) VALUES (v1, v2);
+UPDATE t SET col = val WHERE condition;     -- always check WHERE with SELECT first
+DELETE FROM t WHERE condition;
+```
+
+## Transactions
+
+```sql
+BEGIN;
+  ... statements ...
+COMMIT;   -- or ROLLBACK;
+```
+
+## Constraints
+
+`PRIMARY KEY`, `FOREIGN KEY ... REFERENCES`, `UNIQUE`, `NOT NULL`, `CHECK (...)`
+
+## Stored functions & procedures (PL/pgSQL)
+
+```sql
+CREATE OR REPLACE FUNCTION fn(p_arg INT) RETURNS NUMERIC AS $$
+DECLARE
+    v_local NUMERIC;      -- variables: DECLARE ... ; before BEGIN
+BEGIN
+    SELECT col INTO v_local FROM t WHERE id = p_arg;
+    IF v_local > 10 THEN RETURN v_local; ELSE RETURN 0; END IF;
+END;
+$$ LANGUAGE plpgsql;
+SELECT fn(5);                          -- functions: called with SELECT, return a value
+
+CREATE OR REPLACE PROCEDURE proc(p_arg INT DEFAULT 30)
+LANGUAGE plpgsql AS $$
+DECLARE rows_updated INT;
+BEGIN
+    UPDATE t SET col = 0 WHERE id = p_arg;
+    GET DIAGNOSTICS rows_updated = ROW_COUNT;
+    RAISE NOTICE '% row(s) updated', rows_updated;
+END;
+$$;
+CALL proc(5);                          -- procedures: called with CALL, no return value, can manage transactions
+
+-- FOR loop over a query
+FOR rec IN SELECT * FROM t LOOP
+    RAISE NOTICE '%', rec.col;
+END LOOP;
+```
+
+## Reading EXPLAIN & tuning
+
+- `Seq Scan` = full table read; `Index Scan` = jump via index, then fetch row;
+  `Index Only Scan` = index alone had every needed column, fastest
+- `Hash Join` = builds hash table from smaller side; `Nested Loop` = fine if
+  outer side is small, bad if large and unindexed
+- Compare estimated vs. actual rows — big gaps mean stale stats (`ANALYZE t;`)
+- Cost numbers are relative units, not milliseconds
+
+```sql
+CREATE INDEX idx ON t(col);                                  -- basic B-tree
+CREATE INDEX idx ON t(col1, col2);                            -- composite — most-filtered column first
+CREATE INDEX idx ON t(col) WHERE status = 'pending';           -- partial — indexes a subset of rows
+CREATE INDEX idx ON t(col) INCLUDE (col2, col3);                -- covering — enables Index Only Scan
+```
+FK columns aren't auto-indexed in Postgres (PK is) — index them explicitly
+when joined/filtered often.
+
+## Dynamic SQL (PL/pgSQL)
+
+```sql
+-- %I = safely quoted identifier (column/table name), %L = safely quoted literal
+RETURN QUERY EXECUTE format(
+    'SELECT %I FROM t ORDER BY %I DESC LIMIT $1', p_col, p_col
+) USING p_limit;   -- values go through USING, not format()
+```
+Never string-concatenate user input into SQL. `%I`/`%L` only make
+*identifiers/literals* safe — for things like a dynamic `ASC`/`DESC`
+keyword, validate against an allow-list first.
+
+## Pitfalls to avoid
+
+- `WHERE col = NULL` never matches — use `IS NULL`
+- `SELECT *` in application code — name your columns
+- `NOT IN` with a subquery that can return `NULL` — use `NOT EXISTS`
+- String-concatenating user input into SQL — always use parameterized queries
+- N+1 queries in ORMs — check for a way to eager-load / join instead
+- Adding indexes everywhere — they speed reads, slow writes, cost storage

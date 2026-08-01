@@ -1,0 +1,155 @@
+---
+title: "Setup"
+description: "Environment options, the ERD, and how to load the practice database."
+level: "setup"
+duration: "15-20 min"
+---
+## 1. Pick an environment
+
+You have three good options depending on the room. All of them can run the
+same `schema.sql`.
+
+### Option A — Browser sandbox (recommended for workshops)
+
+No installs, works on any laptop/OS, each person gets an isolated database.
+As of mid-2026, in-browser WebAssembly Postgres playgrounds (Postgres
+compiled to run client-side, e.g. via PGlite) are the most reliable
+zero-setup option — the whole database runs locally in the tab, so there's
+no shared server to overload with a room full of people running queries at
+once. Look for one that:
+
+- Lets you paste a full `.sql` script (not just single statements)
+- Persists your session if you accidentally refresh
+- Shows results as a table, not just raw text
+
+Fallback if your preferred tool is down: any hosted "Postgres playground" or
+"SQL Fiddle"-style site works the same way — paste `schema.sql`, run it once,
+then run individual queries below it.
+
+### Option B — Local PostgreSQL
+
+```bash
+# macOS
+brew install postgresql@16
+brew services start postgresql@16
+createdb brewhaven
+
+# Ubuntu/Debian
+sudo apt install postgresql
+sudo -u postgres createdb brewhaven
+
+# Load the schema
+psql -d brewhaven -f schema.sql
+```
+
+### Option C — Local SQLite (best for fully offline rooms)
+
+SQLite is close enough to Postgres for this workshop, with a few syntax
+differences called out below.
+
+```bash
+sqlite3 brewhaven.db < schema_sqlite.sql
+sqlite3 brewhaven.db
+```
+
+**Postgres → SQLite syntax swaps** if you're adapting `schema.sql` yourself:
+
+| Postgres | SQLite |
+|---|---|
+| `SERIAL PRIMARY KEY` | `INTEGER PRIMARY KEY AUTOINCREMENT` |
+| `BOOLEAN` | `INTEGER` (0/1) — or just use `BOOLEAN`, SQLite is untyped |
+| `NUMERIC(8,2)` | `REAL` or `NUMERIC` (no precision enforcement) |
+| `TRUE` / `FALSE` | `1` / `0` |
+| `CASCADE` on `DROP TABLE` | not needed — drop child tables first |
+
+Everything in Module 1, Module 2, and the window-function/CTE parts of
+Module 3 runs unmodified on SQLite 3.25+. The stored procedure/function and
+dynamic SQL (`EXECUTE format(...)`) sections of Module 3 use PL/pgSQL,
+which is Postgres-specific — SQLite has no equivalent, so run Module 3's
+`3.1` and `3.3` sections on Postgres (or the browser sandbox) even if the
+rest of the day is on SQLite.
+
+## 2. Load the practice database
+
+Run the full `schema.sql` file in your chosen environment. It:
+
+1. Drops any existing tables from a previous run (safe to re-run any time)
+2. Creates 7 tables: `customers`, `employees`, `categories`, `products`,
+   `orders`, `order_items`, `reviews`
+3. Seeds them with realistic sample data for a small coffee company
+
+Verify it worked:
+
+```sql
+SELECT table_name FROM information_schema.tables WHERE table_schema = 'public';
+-- SQLite: SELECT name FROM sqlite_master WHERE type = 'table';
+
+SELECT COUNT(*) FROM orders;   -- should return 40
+SELECT COUNT(*) FROM products; -- should return 18
+```
+
+## 3. The schema (ERD)
+
+```
+customers                employees (self-referencing)
+----------                ----------
+customer_id PK            employee_id PK
+first_name                first_name
+last_name                 last_name
+email                      title
+city                       manager_id FK -> employees.employee_id
+country                    hire_date
+signup_date
+
+categories                 products
+----------                 ----------
+category_id PK             product_id PK
+category_name              product_name
+                            category_id FK -> categories.category_id
+                            price
+                            cost
+                            is_active
+
+orders                     order_items
+----------                 ----------
+order_id PK                order_item_id PK
+customer_id FK -> customers    order_id FK -> orders.order_id
+employee_id FK -> employees    product_id FK -> products.product_id
+order_date                     quantity
+status                         unit_price
+
+reviews
+----------
+review_id PK
+product_id FK -> products.product_id
+customer_id FK -> customers.customer_id
+rating (1-5)
+review_date
+comment
+```
+
+**Why this schema, on purpose:**
+
+- `employees.manager_id` referencing its own table is what lets us teach
+  self-joins and recursive CTEs later without introducing a new dataset.
+- `order_items.unit_price` is a deliberate **price snapshot** — it can differ
+  from `products.price` today. This is a real-world pattern (historical
+  orders shouldn't change value if you later change a product's price) and
+  it's a great discussion point in the intermediate module.
+- `products.is_active` gives you a soft-delete example for `WHERE` filtering
+  and for talking about why you rarely hard-delete rows in production.
+- `orders.status` includes `'pending'` and `'cancelled'` rows on purpose —
+  several exercises hinge on remembering to filter (or deliberately not
+  filter) these out.
+
+## 4. Sanity-check query
+
+Have everyone run this before you start Module 1 — if it returns rows, they're set up correctly:
+
+```sql
+SELECT c.first_name, c.last_name, o.order_id, o.order_date, o.status
+FROM customers c
+JOIN orders o ON o.customer_id = c.customer_id
+ORDER BY o.order_date
+LIMIT 5;
+```

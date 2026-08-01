@@ -1,0 +1,513 @@
+---
+title: "Mastery"
+description: "Stored procedures and variables, execution plans and tuning, and dynamic SQL."
+level: "mastery"
+duration: "2.5-3.5 hours"
+---
+**Goal:** attendees leave able to package logic into a reusable stored
+procedure/function with real variables and control flow, read an execution
+plan and fix a query because of it, and build SQL dynamically at runtime
+without opening an injection hole. This is the deepest, most
+implementation-heavy module — pace deliberately.
+
+**If you're short on time:** keep 3.1 (procedures/functions) and 3.2
+(execution plans) as full hands-on sections — they're the highest-value
+material for this audience. Demo 3.3 (dynamic SQL) instead of running it
+hands-on, and make the capstone take-home.
+
+*Take a 10-minute break after 3.2 (execution plans), before dynamic SQL —
+that's the conceptual hardest section of the day.*
+
+---
+
+## 3.1 Stored procedures, functions, and variables (45–55 min)
+
+### Functions vs. procedures — the distinction Postgres actually enforces
+
+| | Function | Procedure |
+|---|---|---|
+| Called with | `SELECT fn(...)` | `CALL proc(...)` |
+| Returns a value | yes (scalar, row, or table) | no (but can have `OUT` params) |
+| Can control transactions (`COMMIT`/`ROLLBACK`) inside it | no | yes |
+| Typical use | compute/derive a value, or return rows | do something — a multi-step operation with side effects |
+
+### A function with variables and branching logic
+
+```sql
+CREATE OR REPLACE FUNCTION customer_tier(p_customer_id INT)
+RETURNS TEXT AS $$
+DECLARE
+    v_revenue NUMERIC;
+BEGIN
+    SELECT COALESCE(SUM(oi.quantity * oi.unit_price), 0)
+    INTO v_revenue
+    FROM orders o
+    JOIN order_items oi ON oi.order_id = o.order_id
+    WHERE o.customer_id = p_customer_id AND o.status = 'completed';
+
+    IF v_revenue >= 150 THEN
+        RETURN 'VIP';
+    ELSIF v_revenue >= 50 THEN
+        RETURN 'Regular';
+    ELSE
+        RETURN 'New/Low';
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT customer_id, first_name, customer_tier(customer_id) AS tier
+FROM customers
+ORDER BY tier;
+```
+
+Point out each piece as you type it:
+
+- `p_customer_id` — a **parameter**, scoped to this call.
+- `DECLARE ... v_revenue NUMERIC;` — a **local variable**. `v_` prefix for
+  variables and `p_` for parameters is a common convention that avoids
+  accidentally shadowing a column name of the same name (a real, easy-to-
+  hit bug — try removing the prefix and renaming `v_revenue` to `revenue`
+  to show the ambiguity warning Postgres raises).
+- `SELECT ... INTO v_revenue` — assigns a query result into a variable.
+- `IF / ELSIF / ELSE / END IF` — real control flow, not just a `CASE`
+  expression.
+
+### A procedure with a loop, a variable, and a side effect
+
+```sql
+CREATE OR REPLACE PROCEDURE cancel_stale_pending_orders(cutoff_days INT DEFAULT 30)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    rows_updated INT;
+BEGIN
+    UPDATE orders
+    SET status = 'cancelled'
+    WHERE status = 'pending'
+      AND order_date < CURRENT_DATE - cutoff_days;
+
+    GET DIAGNOSTICS rows_updated = ROW_COUNT;
+    RAISE NOTICE 'Cancelled % stale pending order(s)', rows_updated;
+END;
+$$;
+
+CALL cancel_stale_pending_orders(30);
+CALL cancel_stale_pending_orders();   -- uses the DEFAULT of 30
+```
+
+- `DEFAULT 30` — optional parameters, same idea as any language.
+- `GET DIAGNOSTICS ... = ROW_COUNT` — capturing how many rows the previous
+  statement touched, into a variable.
+- `RAISE NOTICE` — the `print()`/`console.log()` of PL/pgSQL, invaluable
+  for debugging a procedure step by step.
+- This is a **procedure**, not a function, on purpose: it does something
+  (mutates data) rather than computing a value to hand back.
+
+### A `FOR` loop over a query result
+
+```sql
+CREATE OR REPLACE PROCEDURE print_top_products(p_limit INT DEFAULT 3)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    rec RECORD;
+BEGIN
+    FOR rec IN
+        SELECT p.product_name, SUM(oi.quantity) AS total_qty
+        FROM products p
+        JOIN order_items oi ON oi.product_id = p.product_id
+        GROUP BY p.product_name
+        ORDER BY total_qty DESC
+        LIMIT p_limit
+    LOOP
+        RAISE NOTICE '% — % units sold', rec.product_name, rec.total_qty;
+    END LOOP;
+END;
+$$;
+
+CALL print_top_products(5);
+```
+
+`RECORD` is a variable that holds one row at a time from the loop — useful
+when you need row-by-row procedural logic that a set-based query can't
+express directly (rare in analyst work, but good to recognize when you see
+it in someone else's code).
+
+### Try it yourself
+1. Write a function `product_margin_pct(p_product_id INT)` that returns
+   `(price - cost) / price * 100`, rounded to 1 decimal.
+2. Write a procedure `apply_category_discount(p_category_id INT, p_pct
+   NUMERIC)` that reduces every product's price in that category by the
+   given percentage, and `RAISE NOTICE`s how many rows changed.
+3. Extend the `customer_tier` function to accept the VIP/Regular
+   thresholds as parameters instead of hardcoding `150`/`50`.
+
+<details>
+<summary>Solution — 1 and 2</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION product_margin_pct(p_product_id INT)
+RETURNS NUMERIC AS $$
+DECLARE
+    v_price NUMERIC;
+    v_cost  NUMERIC;
+BEGIN
+    SELECT price, cost INTO v_price, v_cost FROM products WHERE product_id = p_product_id;
+    RETURN ROUND((v_price - v_cost) / v_price * 100, 1);
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE PROCEDURE apply_category_discount(p_category_id INT, p_pct NUMERIC)
+LANGUAGE plpgsql AS $$
+DECLARE
+    rows_updated INT;
+BEGIN
+    UPDATE products
+    SET price = ROUND(price * (1 - p_pct / 100.0), 2)
+    WHERE category_id = p_category_id;
+    GET DIAGNOSTICS rows_updated = ROW_COUNT;
+    RAISE NOTICE '% product(s) discounted', rows_updated;
+END;
+$$;
+```
+</details>
+
+---
+
+## 3.2 Execution plans & query tuning (55–65 min)
+
+This is the "how do I know my query is actually fast, and what do I do
+about it if it isn't" section.
+
+### Reading EXPLAIN ANALYZE
+
+```sql
+EXPLAIN ANALYZE
+SELECT c.first_name, c.last_name, COUNT(*)
+FROM customers c
+JOIN orders o ON c.customer_id = o.customer_id
+WHERE o.status = 'completed'
+GROUP BY c.first_name, c.last_name;
+```
+
+Read the tree **bottom-up, inside-out** — the innermost nodes run first:
+
+- **`Seq Scan`** — reads every row of the table. Fine on small tables or
+  when most rows match anyway; a red flag on a large table with a
+  selective filter.
+- **`Index Scan`** — walks an index to find matching rows directly, then
+  fetches each from the table.
+- **`Index Only Scan`** — like above, but every needed column is *in the
+  index itself*, so it never touches the table at all. Fastest option when
+  achievable (see "covering indexes" below).
+- **`Hash Join`** — builds an in-memory hash table from the smaller input,
+  probes it with the larger one. Common for equi-joins (`ON a.id = b.id`)
+  without a usable index.
+- **`Nested Loop`** — for each row on one side, look up matches on the
+  other. Fine (even ideal) when the outer side is small; disastrous if
+  it's large and unindexed.
+- **`cost=X..Y`** — planner's *estimated* relative cost (arbitrary units,
+  not milliseconds); `X` = cost to return the first row, `Y` = cost to
+  return all rows.
+- **`actual time=X..Y rows=N loops=M`** (only with `ANALYZE`) — this node
+  really ran, in milliseconds, returning `N` rows, executed `M` times.
+- **Estimated rows vs. actual rows** — a large mismatch means the
+  planner's statistics are stale. Fix with `ANALYZE table_name;`.
+
+### Index strategy in depth
+
+**Composite (multi-column) indexes — column order matters:**
+
+```sql
+CREATE INDEX idx_orders_customer_status ON orders(customer_id, status);
+```
+
+This index efficiently serves `WHERE customer_id = 5` and
+`WHERE customer_id = 5 AND status = 'completed'`, but generally **not**
+`WHERE status = 'completed'` alone — same idea as a phone book sorted by
+last name then first name: great for finding "Smith," useless for finding
+everyone named "John" regardless of last name. Column order should put the
+most selective / most commonly filtered-alone column first.
+
+**Partial indexes — index only the rows you actually query:**
+
+```sql
+CREATE INDEX idx_orders_pending ON orders(order_date) WHERE status = 'pending';
+```
+
+If 90% of your queries against `orders` only ever care about
+`status = 'pending'`, indexing just that slice is smaller and cheaper to
+maintain than indexing every row.
+
+**Covering indexes (`INCLUDE`) — enabling Index Only Scans:**
+
+```sql
+CREATE INDEX idx_orders_customer_covering
+    ON orders(customer_id) INCLUDE (order_date, status);
+```
+
+`INCLUDE`d columns aren't part of the search key but ride along in the
+index, so a query selecting only `customer_id, order_date, status` never
+needs to touch the underlying table.
+
+### Sargability — the concept from Module 2, generalized
+
+Wrapping an indexed column in a function or doing arithmetic on the
+*column* (not the constant) usually defeats index usage:
+
+```sql
+-- NOT sargable — function wraps the column, index on order_date can't be used
+WHERE EXTRACT(YEAR FROM order_date) = 2023
+
+-- Sargable — the column is bare, the transformation is on the constant side
+WHERE order_date >= '2023-01-01' AND order_date < '2024-01-01'
+```
+
+Same idea with implicit type casts: comparing a `TEXT` column to a number,
+or a non-matching type, can silently disable an index in some databases —
+worth checking `EXPLAIN` any time a "should be fast" query isn't.
+
+### Rewriting a correlated subquery as a window function
+
+A classic before/after — same result, often a materially different plan:
+
+```sql
+-- Before: correlated subquery re-runs per outer row
+SELECT p.product_name, p.price, p.category_id
+FROM products p
+WHERE p.price = (SELECT MAX(p2.price) FROM products p2 WHERE p2.category_id = p.category_id);
+
+-- After: window function computes it in one pass over the data
+SELECT product_name, price, category_id FROM (
+    SELECT product_name, price, category_id,
+           RANK() OVER (PARTITION BY category_id ORDER BY price DESC) AS rnk
+    FROM products
+) x WHERE rnk = 1;
+```
+
+Run `EXPLAIN ANALYZE` on both live and compare the plan shape — this is a
+good moment to reinforce that "more readable" and "faster" are often the
+same rewrite, not a trade-off.
+
+### Statistics and maintenance (brief)
+
+- `ANALYZE table_name;` — refreshes the planner's statistics (row counts,
+  value distribution). Postgres autovacuum does this automatically in the
+  background, but stale stats after a big bulk load are a real, common
+  cause of bad plans.
+- `VACUUM` — reclaims space from deleted/updated rows (Postgres uses
+  MVCC — old row versions stick around until vacuumed). Mention only;
+  full MVCC internals are out of scope for today.
+
+### Try it yourself
+1. Run `EXPLAIN ANALYZE` on a query filtering `orders` by `employee_id`
+   before and after adding an index on it — note the plan node change even
+   if timing looks similar on this small dataset. (`customer_id` was
+   already indexed back in Module 1 — use a fresh column here.)
+2. Create a partial index on `orders` for `status = 'pending'` and explain
+   in one sentence why it's smaller than a full index on `status`.
+3. Take one query from Module 2 that uses `EXTRACT(...)` in a `WHERE`
+   clause and rewrite it to be sargable.
+
+---
+
+## 3.3 Dynamic SQL (35–45 min)
+
+**The problem this solves:** sometimes the *shape* of the query needs to
+change at runtime — which column to sort by, which column to group/window
+by — and that can't be a bind parameter, because parameters supply
+*values*, not column/table names.
+
+### The unsafe way — never do this
+
+```python
+# VULNERABLE: building SQL by string-concatenating user input
+query = f"SELECT * FROM products ORDER BY {sort_column} DESC"
+# if sort_column is actually:  price; DROP TABLE products; --
+# you just handed the caller a second statement to run
+```
+
+### The safe way — `format()` with `%I` / `%L`, inside PL/pgSQL
+
+```sql
+CREATE OR REPLACE FUNCTION top_products_by(p_sort_column TEXT, p_limit INT DEFAULT 5)
+RETURNS TABLE(product_name TEXT, sort_value NUMERIC) AS $$
+BEGIN
+    RETURN QUERY EXECUTE format(
+        'SELECT product_name::TEXT, %I::NUMERIC FROM products ORDER BY %I DESC LIMIT $1',
+        p_sort_column, p_sort_column
+    ) USING p_limit;
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT * FROM top_products_by('price', 3);
+```
+
+**Gotcha worth flagging live:** `product_name` is declared `VARCHAR(100)`
+in the table but `TEXT` in `RETURNS TABLE(...)` — PL/pgSQL checks these
+*exactly*, and `varchar` ≠ `text` even though they behave identically in
+almost every other context. The `::TEXT` cast in the `SELECT` is what
+makes the declared return type match. This bites people constantly and is
+worth the 30 seconds to show the error message once.
+
+- `%I` — safely quotes an **identifier** (a column/table name). It
+  escapes anything malicious the same way `"double quotes"` would, and
+  rejects it as a value rather than letting it become SQL syntax.
+- `%L` — safely quotes a **literal** value (a string constant), handling
+  embedded quotes correctly.
+- `USING p_limit` — a genuine bind parameter for a *value* (the `LIMIT`),
+  kept separate from the identifier substitution. Values should almost
+  always go through `USING`, not `format()`, even when dynamic SQL is
+  otherwise necessary.
+
+**The rule to say explicitly:** `%I`/`%L` make dynamic *identifiers* safe.
+They are not a general-purpose escaping tool for arbitrary SQL fragments —
+if you're building anything more complex than a column/table name
+substitution, you likely want a different design (an allow-list of valid
+values, checked in plain SQL/application code before it ever reaches
+`format()`).
+
+### Injecting a dynamic column into a window function
+
+This is the same pattern applied to `PARTITION BY` — dynamically choosing
+what to rank/group by within a window function, safely:
+
+```sql
+CREATE OR REPLACE FUNCTION rank_products_within(p_partition_col TEXT)
+RETURNS TABLE(product_name TEXT, partition_value TEXT, price NUMERIC, rnk BIGINT) AS $$
+BEGIN
+    RETURN QUERY EXECUTE format(
+        'SELECT product_name::TEXT, %I::TEXT, price,
+                RANK() OVER (PARTITION BY %I ORDER BY price DESC)
+         FROM products',
+        p_partition_col, p_partition_col
+    );
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT * FROM rank_products_within('category_id');
+SELECT * FROM rank_products_within('is_active');
+```
+
+Same product-ranking window function from Module 2, but the room can now
+pass *which column* to partition by at call time — this is what "dynamic"
+buys you: one reusable procedure instead of a hand-written near-duplicate
+query per report variant.
+
+### An allow-list as a second layer of defense
+
+Even with `%I`, it's good practice to validate that the caller-supplied
+column name is actually one you intend to expose, rather than trusting it
+implicitly:
+
+```sql
+CREATE OR REPLACE FUNCTION rank_products_within_safe(p_partition_col TEXT)
+RETURNS TABLE(product_name TEXT, partition_value TEXT, price NUMERIC, rnk BIGINT) AS $$
+BEGIN
+    IF p_partition_col NOT IN ('category_id', 'is_active') THEN
+        RAISE EXCEPTION 'Invalid partition column: %', p_partition_col;
+    END IF;
+
+    RETURN QUERY EXECUTE format(
+        'SELECT product_name::TEXT, %I::TEXT, price,
+                RANK() OVER (PARTITION BY %I ORDER BY price DESC)
+         FROM products',
+        p_partition_col, p_partition_col
+    );
+END;
+$$ LANGUAGE plpgsql;
+```
+
+### Try it yourself
+1. Extend `top_products_by` to accept a sort direction (`'ASC'`/`'DESC'`)
+   as a second dynamic parameter — validate it against an allow-list
+   first (there's no `%I`/`%L` for keywords like `ASC`/`DESC`, so an
+   allow-list is the *only* safe option here).
+2. Write a dynamic version of the Module 2 "top-N-per-group" query that
+   accepts both the partition column and `N` as parameters.
+
+---
+
+## 3.4 Capstone (pairs, ~25–35 min)
+
+Work in pairs. No single query is "the" answer — discuss trade-offs and be
+ready to justify design choices (why a CTE vs. subquery, why an index
+would or wouldn't help, why a function vs. a plain query).
+
+> BrewHaven leadership wants a reusable **customer segmentation report**,
+> callable as `SELECT * FROM customer_segments(60);` where `60` is the
+> "at risk" inactivity threshold in days. For each customer, return their
+> completed-order revenue, their revenue rank, days since their most
+> recent order, and a segment label: `'VIP'` (top 20% by revenue),
+> `'At Risk'` (no order within the threshold), or `'Regular'`.
+
+Guide pairs toward: a `RETURNS TABLE` function wrapping a CTE (per-customer
+revenue) + window function (`NTILE(5)` for the top-20% cutoff) + `CASE`
+for the label, with the threshold as a parameter rather than hardcoded.
+Ask 1–2 pairs to run `EXPLAIN ANALYZE` on their version and justify
+whether any index would actually help it.
+
+<details>
+<summary>One possible solution</summary>
+
+```sql
+CREATE OR REPLACE FUNCTION customer_segments(p_at_risk_days INT DEFAULT 60)
+RETURNS TABLE(
+    first_name TEXT, last_name TEXT, revenue NUMERIC,
+    revenue_rank BIGINT, days_since_last_order INT, segment TEXT
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH customer_revenue AS (
+        SELECT c.customer_id, c.first_name, c.last_name,
+               COALESCE(SUM(oi.quantity * oi.unit_price), 0) AS revenue,
+               MAX(o.order_date) AS last_order_date
+        FROM customers c
+        LEFT JOIN orders o ON o.customer_id = c.customer_id AND o.status = 'completed'
+        LEFT JOIN order_items oi ON oi.order_id = o.order_id
+        GROUP BY c.customer_id, c.first_name, c.last_name
+    ),
+    ranked AS (
+        SELECT cr.*,
+               RANK() OVER (ORDER BY cr.revenue DESC) AS revenue_rank,
+               NTILE(5) OVER (ORDER BY cr.revenue DESC) AS revenue_quintile,
+               (SELECT MAX(order_date) FROM orders WHERE status = 'completed') AS dataset_max_date
+        FROM customer_revenue cr
+    )
+    SELECT r.first_name::TEXT, r.last_name::TEXT, r.revenue, r.revenue_rank,
+           (r.dataset_max_date - r.last_order_date)::INT AS days_since_last_order,
+           CASE
+               WHEN r.revenue_quintile = 1 THEN 'VIP'
+               WHEN r.last_order_date IS NULL
+                    OR r.dataset_max_date - r.last_order_date > p_at_risk_days THEN 'At Risk'
+               ELSE 'Regular'
+           END AS segment
+    FROM ranked r
+    ORDER BY r.revenue DESC;
+END;
+$$ LANGUAGE plpgsql;
+
+SELECT * FROM customer_segments(60);
+SELECT * FROM customer_segments(30);   -- tighter threshold, same function
+```
+
+**A live gotcha worth pointing out if a pair hits it:** `RETURNS TABLE(...
+revenue NUMERIC ...)` makes `revenue` an output variable in scope for the
+whole function body — the same name used unqualified inside the `ranked`
+CTE (`ORDER BY revenue DESC`) becomes ambiguous between "the output
+variable" and "the CTE's column." This is exactly the parameter/column
+shadowing warning from 3.1, showing up naturally rather than as a
+contrived example — qualify with the CTE's alias (`cr.revenue`) to resolve
+it, as done above.
+</details>
+
+---
+
+## Wrap-up
+
+Recap the day's arc: keys/indexing concepts → JOIN family, CTEs, window
+functions → stored procedures with real variables → reading and acting on
+execution plans → building SQL dynamically without an injection hole. Hand
+out `04-cheatsheet.md`. Suggested next step: take one recurring report
+attendees currently rebuild by hand each time, and turn it into a
+parameterized function like the capstone.

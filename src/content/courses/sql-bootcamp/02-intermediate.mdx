@@ -1,0 +1,446 @@
+---
+title: "Intermediate"
+description: "The full JOIN family, subqueries, CTEs, window functions, dates, and views."
+level: "intermediate"
+duration: "2-2.5 hours"
+---
+**Goal:** attendees leave able to pick the right JOIN for any relationship
+shape, structure multi-step logic with CTEs instead of unreadable nested
+subqueries, and solve ranking/running-total/period-over-period problems
+with window functions — the single highest-leverage skill in this module
+for a data-analyst audience.
+
+**If you're short on time:** trim 2.5 (date functions) to a live demo
+instead of exercises, and cut 2.6 (views) to a 5-minute mention. Do not cut
+2.3 (CTEs) or 2.4 (window functions) — everything in Module 3 assumes both.
+
+*Take a 10-minute break after 2.3 (CTEs), before window functions — 2.4 is
+long and deserves fresh attention.*
+
+---
+
+## 2.1 The full JOIN family, fast (15–20 min)
+
+You already know `INNER JOIN`. Here's the rest, with the idiomatic use case
+for each — these patterns come up constantly in analyst work.
+
+| JOIN | Keeps | Typical use |
+|---|---|---|
+| `INNER JOIN` | only matching rows on both sides | "give me X with its Y" |
+| `LEFT JOIN` | all of left, matched or not | "give me all X, with Y if it exists" |
+| `RIGHT JOIN` | all of right, matched or not | rare — usually rewritten as `LEFT JOIN` with tables swapped |
+| `FULL OUTER JOIN` | all of both | reconciliation ("what's in A but not B, and vice versa, in one pass") |
+| `CROSS JOIN` | every combination | generating a full grid (e.g. every product × every month) |
+
+### The anti-join pattern — the one you'll use most
+
+"Find X with **no** matching Y" is everywhere in analyst work (customers
+with no orders, products never sold, employees with no reports). It's
+always the same shape: `LEFT JOIN` + filter where the right side is `NULL`.
+
+```sql
+SELECT p.product_name
+FROM products p
+LEFT JOIN order_items oi ON p.product_id = oi.product_id
+WHERE oi.order_item_id IS NULL;   -- products that have never been ordered
+```
+
+### The semi-join pattern — existence without duplication
+
+A plain `JOIN` to check "does this customer have *any* completed order"
+risks duplicating the customer row once per matching order. `EXISTS`
+checks existence without that risk:
+
+```sql
+SELECT c.first_name, c.last_name
+FROM customers c
+WHERE EXISTS (
+    SELECT 1 FROM orders o
+    WHERE o.customer_id = c.customer_id AND o.status = 'completed'
+);
+```
+
+### Self join — recap
+
+```sql
+SELECT e.first_name || ' ' || e.last_name AS employee,
+       m.first_name || ' ' || m.last_name AS manager
+FROM employees e
+LEFT JOIN employees m ON e.manager_id = m.employee_id;
+```
+
+### Try it yourself
+1. Find customers who have never left a review (anti-join).
+2. Find products that have been ordered at least once, without duplicate
+   rows per product even if it appears in many orders (semi-join with
+   `EXISTS`).
+3. Reconcile: which `customer_id` values exist in `customers` but not in
+   `orders`, **and** which exist in `orders` but not `customers` (should be
+   none, given the FK — this is really a demo of `FULL OUTER JOIN` as a
+   data-quality check pattern).
+
+---
+
+## 2.2 Subqueries & CASE, fast (10–15 min)
+
+You've likely written these — the goal here is the pitfalls, not the syntax.
+
+```sql
+-- Correlated subquery: products priced above their own category's average
+SELECT p.product_name, p.price
+FROM products p
+WHERE p.price > (
+    SELECT AVG(p2.price) FROM products p2 WHERE p2.category_id = p.category_id
+);
+```
+
+**The pitfall to flag explicitly:** `NOT IN` with a subquery silently
+returns **zero rows** if that subquery produces even one `NULL` value —
+one of the most common silent bugs in analyst SQL:
+
+```sql
+-- DANGEROUS if manager_id can be NULL anywhere in the subquery result
+SELECT * FROM employees
+WHERE employee_id NOT IN (SELECT manager_id FROM employees);
+-- if manager_id has any NULL, this returns 0 rows, silently, no error
+
+-- SAFE equivalent
+SELECT * FROM employees e
+WHERE NOT EXISTS (
+    SELECT 1 FROM employees m WHERE m.manager_id = e.employee_id
+);
+```
+
+`CASE` for conditional labeling and conditional aggregation:
+
+```sql
+SELECT
+    COUNT(*) AS total_orders,
+    COUNT(CASE WHEN status = 'completed' THEN 1 END) AS completed,
+    COUNT(CASE WHEN status = 'cancelled' THEN 1 END) AS cancelled
+FROM orders;
+```
+
+---
+
+## 2.3 CTEs — Common Table Expressions (25–30 min)
+
+A `WITH` clause names a subquery so later parts of the statement can
+reference it — this is how you turn an unreadable wall of nested
+parentheses into a sequence of named steps.
+
+### Basic and chained CTEs
+
+```sql
+WITH order_totals AS (
+    SELECT o.order_id, o.customer_id,
+           SUM(oi.quantity * oi.unit_price) AS total
+    FROM orders o
+    JOIN order_items oi ON o.order_id = oi.order_id
+    GROUP BY o.order_id, o.customer_id
+),
+customer_lifetime_value AS (
+    SELECT customer_id, SUM(total) AS lifetime_value
+    FROM order_totals
+    GROUP BY customer_id
+)
+SELECT c.first_name, c.last_name, clv.lifetime_value
+FROM customer_lifetime_value clv
+JOIN customers c ON c.customer_id = clv.customer_id
+ORDER BY clv.lifetime_value DESC
+LIMIT 5;
+```
+
+**Talking point:** a CTE and a nested subquery are usually equivalent to
+the planner — pick CTEs for readability once you're past one level of
+nesting, not because they're inherently faster. (Materialization behavior
+of CTEs is a Module 3 execution-plan topic.)
+
+### Recursive CTEs — walking a hierarchy
+
+```sql
+WITH RECURSIVE org_chart AS (
+    -- Anchor: the top of the hierarchy
+    SELECT employee_id, first_name, last_name, manager_id, 0 AS depth
+    FROM employees
+    WHERE manager_id IS NULL
+
+    UNION ALL
+
+    -- Recursive step: find direct reports of everyone found so far
+    SELECT e.employee_id, e.first_name, e.last_name, e.manager_id, oc.depth + 1
+    FROM employees e
+    JOIN org_chart oc ON e.manager_id = oc.employee_id
+)
+SELECT REPEAT('  ', depth) || first_name || ' ' || last_name AS org_tree
+FROM org_chart
+ORDER BY depth, first_name;
+```
+
+Walk through it out loud: "start with the anchor (the row with no
+manager), then repeatedly join the growing result back to `employees` to
+find the next level down, until a pass finds nothing new."
+
+### Try it yourself
+1. Rewrite the 2.2 correlated subquery (products above category average)
+   as a CTE.
+2. Using the recursive CTE, add a column counting how many people report
+   up to each manager, directly or indirectly.
+3. Build a 3-step CTE chain: (1) order totals, (2) monthly totals per
+   customer, (3) each customer's best month by revenue.
+
+---
+
+## 2.4 Window functions (35–40 min)
+
+**The core idea, say this explicitly:** `GROUP BY` collapses rows down to
+one per group. A window function keeps every row while still computing
+something *across a related set of rows* (the "window"). This is the
+single most useful thing in this module for report-building.
+
+### Ranking
+
+```sql
+SELECT product_name, category_id, price,
+       RANK()       OVER (PARTITION BY category_id ORDER BY price DESC) AS rank_in_category,
+       DENSE_RANK() OVER (PARTITION BY category_id ORDER BY price DESC) AS dense_rank_in_category,
+       ROW_NUMBER() OVER (PARTITION BY category_id ORDER BY price DESC) AS row_num
+FROM products;
+```
+
+- `PARTITION BY` = the "GROUP BY" of window functions — restart the
+  calculation per category, but don't collapse the rows.
+- **Tie behavior, the question everyone asks:** with a tie at rank 2,
+  `RANK` gives `1, 2, 2, 4` (skips), `DENSE_RANK` gives `1, 2, 2, 3` (no
+  skip), `ROW_NUMBER` gives `1, 2, 3, 4` (arbitrary tiebreak, never ties).
+
+**Top-N-per-group — the pattern that replaces a self-join + correlated
+subquery:**
+
+```sql
+SELECT product_name, category_id, price FROM (
+    SELECT product_name, category_id, price,
+           ROW_NUMBER() OVER (PARTITION BY category_id ORDER BY price DESC) AS rn
+    FROM products
+) ranked
+WHERE rn <= 2;
+```
+
+### Running totals and frame clauses
+
+```sql
+SELECT o.order_id, o.order_date,
+       SUM(oi.quantity * oi.unit_price) OVER (ORDER BY o.order_date) AS running_revenue
+FROM order_items oi
+JOIN orders o ON o.order_id = oi.order_id
+WHERE o.status = 'completed';
+```
+
+`ORDER BY` with no explicit frame defaults to "start of the partition
+through the current row" — that's what makes it a running total instead of
+a grand total. Make the frame explicit when you want control over it, e.g.
+a **3-row moving average**:
+
+```sql
+SELECT o.order_id, o.order_date,
+       AVG(oi.quantity * oi.unit_price) OVER (
+           ORDER BY o.order_date
+           ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+       ) AS moving_avg_3
+FROM order_items oi
+JOIN orders o ON o.order_id = oi.order_id
+WHERE o.status = 'completed';
+```
+
+`ROWS BETWEEN 2 PRECEDING AND CURRENT ROW` = "this row plus the 2 before
+it." Swap to `RANGE` instead of `ROWS` when you want the frame defined by
+*value* (e.g. all rows within the same date) rather than row count — worth
+a one-line mention, not a full detour.
+
+### LAG / LEAD — compare to the previous/next row
+
+```sql
+SELECT customer_id, order_date,
+       LAG(order_date)  OVER (PARTITION BY customer_id ORDER BY order_date) AS previous_order_date,
+       order_date - LAG(order_date) OVER (PARTITION BY customer_id ORDER BY order_date) AS days_since_last_order
+FROM orders
+WHERE status = 'completed';
+```
+
+This is the pattern for period-over-period comparisons, "days since last
+X," and churn analysis — anything that needs "the previous row for this
+group" without a self-join. `LEAD` is the mirror image, looking forward.
+
+### FIRST_VALUE / LAST_VALUE / NTILE
+
+```sql
+-- Each customer's first order date, next to every row of theirs
+SELECT customer_id, order_id, order_date,
+       FIRST_VALUE(order_date) OVER (PARTITION BY customer_id ORDER BY order_date) AS first_order_date
+FROM orders;
+
+-- Split customers into 5 revenue buckets (quintiles) — used again in Module 3's capstone
+SELECT customer_id, revenue,
+       NTILE(5) OVER (ORDER BY revenue DESC) AS revenue_quintile
+FROM (
+    SELECT o.customer_id, SUM(oi.quantity * oi.unit_price) AS revenue
+    FROM orders o JOIN order_items oi ON o.order_id = oi.order_id
+    GROUP BY o.customer_id
+) t;
+```
+
+`LAST_VALUE` needs its frame widened to the whole partition to behave
+intuitively (`ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`) —
+worth a one-line warning if someone asks, it's a well-known gotcha.
+
+### Try it yourself
+1. Rank every order by its total size overall (not per customer) —
+   largest = rank 1.
+2. Find each product's best-selling month by total quantity, using
+   `ROW_NUMBER` partitioned by product.
+3. For each customer, compute a 3-order moving average of order size.
+4. For each customer's completed orders in date order, compute days since
+   their previous order — then filter to customers whose most recent gap
+   is over 30 days (candidates for a "come back" campaign).
+
+---
+
+## 2.5 Date & time functions (15–20 min)
+
+```sql
+SELECT order_id, order_date,
+       EXTRACT(YEAR FROM order_date)  AS order_year,
+       EXTRACT(MONTH FROM order_date) AS order_month,
+       DATE_TRUNC('month', order_date) AS order_month_start,
+       order_date + INTERVAL '30 days' AS follow_up_by
+FROM orders;
+```
+
+- `EXTRACT` pulls a single field out.
+- `DATE_TRUNC('month', ...)` rounds a date/timestamp *down* to the start
+  of the unit — this is the one to reach for when grouping by month
+  instead of `EXTRACT`, since it keeps the value sortable and joinable as
+  an actual date:
+
+```sql
+SELECT DATE_TRUNC('month', o.order_date) AS month,
+       SUM(oi.quantity * oi.unit_price) AS revenue
+FROM orders o JOIN order_items oi ON o.order_id = oi.order_id
+WHERE o.status = 'completed'
+GROUP BY DATE_TRUNC('month', o.order_date)
+ORDER BY month;
+```
+
+**The index gotcha, tie back to Module 1:** `WHERE EXTRACT(YEAR FROM
+order_date) = 2023` wraps the column in a function, which means Postgres
+generally **can't use a plain index** on `order_date` for it — the planner
+would have to evaluate the function on every row anyway. Prefer a
+sargable* range instead:
+
+```sql
+WHERE order_date >= '2023-01-01' AND order_date < '2024-01-01'
+```
+
+<sub>*"sargable" = **S**earch **ARG**ument **Able** — a condition written so
+the planner can use an index on it directly, without transforming the
+column first. This term comes back in Module 3.</sub>
+
+### generate_series — scaffolding missing dates
+
+A report that `GROUP BY`s dates only shows dates that had activity — days
+with zero orders silently vanish, which is often exactly wrong for a
+report. `generate_series` builds the full calendar first, then you
+`LEFT JOIN` real data onto it:
+
+```sql
+SELECT d::date AS day, COALESCE(SUM(oi.quantity * oi.unit_price), 0) AS revenue
+FROM generate_series('2023-01-01'::date, '2023-01-10'::date, '1 day') AS d
+LEFT JOIN orders o ON o.order_date = d::date AND o.status = 'completed'
+LEFT JOIN order_items oi ON oi.order_id = o.order_id
+GROUP BY d
+ORDER BY d;
+```
+
+### Try it yourself
+1. Total revenue by month across the whole dataset, using `DATE_TRUNC`.
+2. Every day in March 2023 with its order count, including zero-order days
+   (`generate_series` + `LEFT JOIN`).
+
+---
+
+## 2.6 Views (10 min)
+
+A view is a saved query you can `SELECT` from like a table — good for
+hiding complexity and enforcing one consistent definition of a metric
+instead of copy-pasting the same CTE everywhere:
+
+```sql
+CREATE VIEW order_totals AS
+SELECT o.order_id, o.customer_id, o.order_date,
+       SUM(oi.quantity * oi.unit_price) AS order_total
+FROM orders o
+JOIN order_items oi ON o.order_id = oi.order_id
+GROUP BY o.order_id, o.customer_id, o.order_date;
+
+SELECT * FROM order_totals WHERE order_total > 50;
+```
+
+A **materialized view** stores the result physically and needs an explicit
+`REFRESH` — trades staleness for speed:
+
+```sql
+CREATE MATERIALIZED VIEW mv_order_totals AS
+SELECT o.order_id, o.customer_id, SUM(oi.quantity * oi.unit_price) AS order_total
+FROM orders o JOIN order_items oi ON o.order_id = oi.order_id
+GROUP BY o.order_id, o.customer_id;
+
+REFRESH MATERIALIZED VIEW mv_order_totals;
+```
+
+Use a plain view when the underlying data changes often and correctness
+matters more than speed; use a materialized view for expensive aggregates
+over slow-changing data (a nightly report, for instance) where a bit of
+staleness is an acceptable trade.
+
+---
+
+## 2.7 Set operations (5 min, mention only if time allows)
+
+`UNION` (dedupes), `UNION ALL` (keeps duplicates, cheaper), `INTERSECT`,
+`EXCEPT` — combine two `SELECT`s with matching column shapes. Not a deep
+topic for this audience; a one-line example is enough:
+
+```sql
+SELECT first_name, last_name, 'customer' AS role FROM customers WHERE first_name = 'Grace'
+UNION ALL
+SELECT first_name, last_name, 'employee' AS role FROM employees WHERE first_name = 'Grace';
+```
+
+---
+
+## Module 2 checkpoint
+
+> "For each customer, show their name, lifetime completed-order revenue,
+> their revenue rank among all customers, and the number of days since
+> their most recent completed order."
+
+```sql
+WITH customer_revenue AS (
+    SELECT c.customer_id, c.first_name, c.last_name,
+           COALESCE(SUM(oi.quantity * oi.unit_price), 0) AS revenue,
+           MAX(o.order_date) AS last_order_date
+    FROM customers c
+    LEFT JOIN orders o ON o.customer_id = c.customer_id AND o.status = 'completed'
+    LEFT JOIN order_items oi ON oi.order_id = o.order_id
+    GROUP BY c.customer_id, c.first_name, c.last_name
+)
+SELECT first_name, last_name, revenue,
+       RANK() OVER (ORDER BY revenue DESC) AS revenue_rank,
+       (SELECT MAX(order_date) FROM orders WHERE status = 'completed') - last_order_date AS days_since_last_order
+FROM customer_revenue
+ORDER BY revenue DESC;
+```
+
+This combines a CTE, a `LEFT JOIN` (anti-join shape, so zero-revenue
+customers still show up), and a window function — the three pillars of
+this module.

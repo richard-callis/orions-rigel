@@ -1,0 +1,156 @@
+---
+title: "Foundations"
+description: "Keys and relationships, and what an index actually does."
+level: "foundations"
+duration: "30-45 min"
+---
+**This module is deliberately short.** This audience already writes basic
+`SELECT`/`WHERE`/`JOIN` queries. The goal here isn't to re-teach that — it's
+to nail down two concepts that most self-taught/basic-SQL analysts have
+never had explained properly, because they didn't need to yet: **how keys
+actually model relationships**, and **what an index is really doing**.
+Everything in Modules 2–3 leans on both.
+
+**If you're really short on time:** skip 1.3 (recap query) entirely and go
+straight from the concepts to Module 2 — assume the room can write a JOIN.
+
+---
+
+## 1.1 Keys & relationships (10 min)
+
+Quick shared vocabulary, fast:
+
+- **Primary key (PK)**: uniquely identifies a row in its table. Can't be
+  `NULL`, can't repeat.
+- **Foreign key (FK)**: a column that must match a primary key value in
+  another table (or be `NULL`, if the column allows it). This is what a
+  "relationship" *is* in a relational database — not a diagram, an actual
+  enforced constraint.
+
+The interesting part for analysts is **cardinality** — how many rows on
+each side can relate to how many on the other:
+
+| Relationship | In this schema | How it's modeled |
+|---|---|---|
+| **One-to-many (1:N)** | one customer → many orders | `orders.customer_id` FK on the "many" side |
+| **One-to-many (1:N)** | one employee → many direct reports | `employees.manager_id` FK referencing its *own* table |
+| **Many-to-many (M:N)** | many orders ↔ many products | `order_items` — a **junction table** with FKs to both sides |
+
+```sql
+-- order_items IS the many-to-many relationship between orders and products.
+-- Neither orders nor products has a direct FK to the other — they can't,
+-- because a single order can contain many products and a single product
+-- appears on many orders. The junction table is the only way to model that.
+SELECT o.order_id, p.product_name, oi.quantity
+FROM orders o
+JOIN order_items oi ON oi.order_id = o.order_id
+JOIN products p ON p.product_id = oi.product_id
+WHERE o.order_id = 1;
+```
+
+**Why this matters practically:** when you see a table that's mostly two
+foreign keys plus a couple of extra columns (`quantity`, `unit_price` here),
+that's almost always a junction table resolving a many-to-many
+relationship — recognizing that shape instantly tells you how to join it.
+
+`REFERENCES` is what makes this *enforced*, not just documented:
+
+```sql
+-- This fails: no customer_id 9999 exists, so the FK constraint rejects it
+INSERT INTO orders (customer_id, employee_id, order_date, status)
+VALUES (9999, 4, '2024-01-01', 'completed');
+```
+
+---
+
+## 1.2 What an index actually does (15–20 min)
+
+Ask the room first: *"What do you think happens, mechanically, when you
+add an index?"* Most answers are vague ("it makes it faster"). Get specific.
+
+### The mental model
+
+A table with no index is a stack of pages in no particular order relative
+to any given column. To find `WHERE customer_id = 5`, the database has to
+read every row and check — that's a **sequential scan**.
+
+An index (Postgres's default is a **B-tree**) is a separate, sorted
+structure that maps column values → row locations, like the index at the
+back of a book: instead of reading every page, you jump to the right
+section directly. The syntax looks like this (the live before/after demo
+below is where you'll actually run it):
+
+```sql
+-- CREATE INDEX idx_orders_customer_id ON orders(customer_id);
+```
+
+This builds a sorted tree of `customer_id` values, each pointing at where
+that row physically lives. `WHERE customer_id = 5` can now walk the tree
+(`O(log n)`) instead of scanning the whole table (`O(n)`).
+
+### What indexes are actually good for
+
+- Columns used often in `WHERE`, `JOIN ... ON`, and `ORDER BY`
+- **Foreign key columns** almost always deserve one — Postgres does **not**
+  auto-index them (unlike the primary key side, which gets one
+  automatically). `orders.customer_id` is a textbook case.
+- Selective columns — ones where a lookup returns a small fraction of the
+  table. An index on `orders.status` (3 possible values) helps far less
+  than one on `orders.customer_id` (near-unique).
+
+### What indexes cost — say this explicitly, it's the part people forget
+
+- Every `INSERT`/`UPDATE`/`DELETE` has to update every index on that table
+  too — more indexes = slower writes.
+- Indexes take disk space, sometimes more than the table itself.
+- An index the planner can't use for a given query is pure overhead. This
+  is why Module 3 spends real time on *when a query can and can't use an
+  index* — it's not automatic just because one exists.
+
+### A concrete before/after (used again in Module 3)
+
+```sql
+EXPLAIN ANALYZE SELECT * FROM orders WHERE customer_id = 5;
+-- note the plan node: Seq Scan or Index Scan?
+
+CREATE INDEX idx_orders_customer_id ON orders(customer_id);
+
+EXPLAIN ANALYZE SELECT * FROM orders WHERE customer_id = 5;
+-- re-run — watch the plan node change
+```
+
+**Honest caveat, say it out loud:** on a table this small (dozens of rows),
+Postgres may still pick a sequential scan even with the index present,
+because reading the whole tiny table really is cheaper than the tree
+traversal overhead. This is correct behavior, not a bug — the planner is
+cost-based, not rule-based. The *shape* of the plan is the teaching point;
+real timing differences show up at real data volumes. Module 3 goes much
+deeper on reading these plans.
+
+---
+
+## 1.3 Fast recap query (5–10 min, optional)
+
+One query, run live, to confirm the room is warmed up before Module 2 raises
+the pace:
+
+```sql
+SELECT c.first_name, c.last_name,
+       COUNT(DISTINCT o.order_id) AS order_count,
+       SUM(oi.quantity * oi.unit_price) AS total_spent
+FROM customers c
+JOIN orders o ON o.customer_id = c.customer_id
+JOIN order_items oi ON oi.order_id = o.order_id
+WHERE o.status = 'completed'
+GROUP BY c.first_name, c.last_name
+ORDER BY total_spent DESC
+LIMIT 5;
+```
+
+Worth pointing out live if someone asks: `COUNT(DISTINCT o.order_id)`
+rather than plain `COUNT(*)` — since this joins in `order_items`, a
+five-item order would otherwise get counted as 5 orders instead of 1. A
+quick, real example of why join fan-out matters.
+
+If most of the room can read this comfortably (even if they couldn't
+write it cold), you're ready for Module 2.

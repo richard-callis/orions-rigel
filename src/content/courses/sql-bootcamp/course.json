@@ -1,0 +1,5 @@
+{
+  "title": "SQL Boot Camp",
+  "tagline": "From core concepts to window functions, execution plans, and dynamic SQL.",
+  "description": "A hands-on SQL course for data analysts who already write basic queries. Light on fundamentals, heavy on CTEs, window functions, stored procedures, execution-plan tuning, and dynamic SQL — all against one running example database you can query live in your browser."
+}
