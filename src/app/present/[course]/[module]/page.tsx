@@ -21,8 +21,7 @@ export default async function PresentPage({ params }: Props) {
   if (!mod) notFound();
 
   const chunks = splitIntoSlides(mod.content);
-  const slideProse =
-    "prose prose-invert prose-lg md:prose-xl max-w-none prose-headings:font-semibold prose-a:text-accent prose-strong:text-white prose-p:text-white/90 prose-li:text-white/90";
+  const slideProse = "prose prose-invert prose-lg md:prose-xl max-w-none prose-headings:font-semibold";
   const slides = chunks.map((chunk, i) => (
     <Lesson key={i} content={chunk} proseClassName={slideProse} />
   ));

@@ -7,13 +7,14 @@ export function Navbar() {
   const { data: session, status } = useSession();
 
   return (
-    <header className="border-b border-border bg-surface/60 backdrop-blur sticky top-0 z-40">
+    <header className="border-b border-border bg-background/80 backdrop-blur sticky top-0 z-40">
       <nav className="mx-auto max-w-6xl flex items-center justify-between px-4 py-3">
-        <Link href="/" className="font-semibold tracking-tight text-lg">
+        <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
+          <span className="h-2 w-2 rounded-full bg-accent" />
           Technical Training
         </Link>
 
-        <div className="flex items-center gap-4 text-sm">
+        <div className="flex items-center gap-4 text-sm text-foreground-secondary">
           <Link href="/courses" className="hover:text-accent transition-colors">
             Courses
           </Link>
@@ -23,18 +24,16 @@ export function Navbar() {
               <Link href="/dashboard" className="hover:text-accent transition-colors">
                 Dashboard
               </Link>
-              <span className="text-foreground/60 hidden sm:inline">
-                {session.user?.name}
-              </span>
+              <span className="text-muted hidden sm:inline">{session.user?.name}</span>
               <button
                 onClick={() => signOut({ callbackUrl: "/" })}
-                className="rounded-md border border-border px-3 py-1.5 hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+                className="rounded-lg border border-border px-3 py-1.5 hover:bg-surface-raised transition-colors cursor-pointer"
               >
                 Sign out
               </button>
             </>
           ) : status === "loading" ? (
-            <span className="text-foreground/40">…</span>
+            <span className="text-muted">…</span>
           ) : (
             <>
               <Link href="/login" className="hover:text-accent transition-colors">
@@ -42,7 +41,7 @@ export function Navbar() {
               </Link>
               <Link
                 href="/signup"
-                className="rounded-md bg-accent text-white px-3 py-1.5 hover:opacity-90 transition-opacity"
+                className="rounded-lg bg-accent text-accent-foreground px-3 py-1.5 font-medium hover:opacity-90 transition-opacity"
               >
                 Sign up
               </Link>

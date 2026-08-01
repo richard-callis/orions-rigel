@@ -2,15 +2,14 @@ import { MDXRemote } from "next-mdx-remote/rsc";
 import remarkGfm from "remark-gfm";
 import { mdxComponents } from "./mdx-components";
 
-const DEFAULT_PROSE =
-  "prose prose-neutral dark:prose-invert max-w-none prose-headings:scroll-mt-20 prose-a:text-accent";
+const DEFAULT_PROSE = "prose prose-invert max-w-none prose-headings:scroll-mt-20";
 
 export function Lesson({
   content,
   proseClassName = DEFAULT_PROSE,
 }: {
   content: string;
-  /** Override the default (light/dark-aware) prose classes — e.g. force `prose-invert` for Present mode. */
+  /** Override the default prose classes — e.g. larger sizing for Present mode. */
   proseClassName?: string;
 }) {
   return (

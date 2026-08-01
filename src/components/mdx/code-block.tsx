@@ -33,14 +33,14 @@ export function CodeBlock({
   }
 
   return (
-    <div className="not-prose group relative my-4 overflow-hidden rounded-lg border border-border bg-[#0d1117]">
-      <div className="flex items-center justify-between border-b border-white/10 px-3 py-1.5">
-        <span className="text-xs text-white/40 font-mono">{language || "code"}</span>
+    <div className="not-prose group relative my-4 overflow-hidden rounded-xl border border-border bg-surface-raised">
+      <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
+        <span className="eyebrow">{language || "code"}</span>
         <div className="flex items-center gap-1">
           {canRun && (
             <button
               onClick={() => playground!.runQuery(code)}
-              className="flex items-center gap-1 rounded px-2 py-1 text-xs text-white/70 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-foreground-secondary hover:bg-foreground/10 hover:text-foreground transition-colors cursor-pointer"
               title="Run in console"
             >
               <Play size={12} /> Run
@@ -48,7 +48,7 @@ export function CodeBlock({
           )}
           <button
             onClick={handleCopy}
-            className="flex items-center gap-1 rounded px-2 py-1 text-xs text-white/70 hover:bg-white/10 hover:text-white transition-colors cursor-pointer"
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-foreground-secondary hover:bg-foreground/10 hover:text-foreground transition-colors cursor-pointer"
             title="Copy code"
           >
             {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? "Copied" : "Copy"}
@@ -56,7 +56,7 @@ export function CodeBlock({
         </div>
       </div>
       <pre className="overflow-x-auto p-3 text-sm leading-relaxed">
-        <code className="font-mono text-white/90">{code}</code>
+        <code className="font-mono text-foreground">{code}</code>
       </pre>
     </div>
   );
@@ -64,7 +64,7 @@ export function CodeBlock({
 
 export function InlineCode({ children }: { children?: ReactNode }) {
   return (
-    <code className="rounded bg-black/[0.06] px-1 py-0.5 text-[0.85em] font-mono dark:bg-white/10">
+    <code className="rounded bg-surface-raised px-1 py-0.5 text-[0.85em] font-mono text-foreground">
       {children}
     </code>
   );

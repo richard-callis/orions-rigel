@@ -18,9 +18,9 @@ export function LearnLayout({ children }: { children: ReactNode }) {
     <PlaygroundContext.Provider value={contextValue}>
       <div className="grid flex-1 grid-cols-1 lg:grid-cols-2 lg:h-[calc(100vh-3.5rem)]">
         <div className="overflow-y-auto px-6 py-8 lg:border-r border-border">
-          <div className="mx-auto max-w-2xl">{children}</div>
+          <div className="w-full mx-auto max-w-2xl">{children}</div>
         </div>
-        <div className="lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] border-t lg:border-t-0 border-border">
+        <div className="lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] border-t lg:border-t-0 border-border bg-surface">
           <SqlConsole ref={consoleRef} />
         </div>
       </div>

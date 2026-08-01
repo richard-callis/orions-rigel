@@ -35,21 +35,24 @@ export function SlideDeck({
   }, [total]);
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-black text-white">
-      <div className="h-1 w-full bg-white/10">
+    <div className="fixed inset-0 flex flex-col bg-background text-foreground">
+      <div className="h-1 w-full bg-border">
         <div
           className="h-full bg-accent transition-all duration-200"
           style={{ width: `${((index + 1) / total) * 100}%` }}
         />
       </div>
 
-      <div className="flex items-center justify-between px-6 py-3 text-sm text-white/50">
-        <span>{title}</span>
+      <div className="flex items-center justify-between px-6 py-3">
+        <span className="eyebrow">{title}</span>
         <div className="flex items-center gap-4">
-          <span>
-            {index + 1} / {total}
+          <span className="font-mono text-xs text-muted">
+            {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
           </span>
-          <Link href={exitHref} className="flex items-center gap-1 hover:text-white transition-colors">
+          <Link
+            href={exitHref}
+            className="flex items-center gap-1 text-sm text-muted hover:text-foreground transition-colors"
+          >
             <X size={14} /> Exit
           </Link>
         </div>
@@ -63,14 +66,14 @@ export function SlideDeck({
         <button
           onClick={() => setIndex((i) => Math.max(i - 1, 0))}
           disabled={index === 0}
-          className="flex items-center gap-1 rounded-md border border-white/20 px-3 py-1.5 text-sm hover:bg-white/10 disabled:opacity-30 transition-colors cursor-pointer"
+          className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-surface-raised disabled:opacity-30 transition-colors cursor-pointer"
         >
           <ChevronLeft size={16} /> Prev
         </button>
         <button
           onClick={() => setIndex((i) => Math.min(i + 1, total - 1))}
           disabled={index === total - 1}
-          className="flex items-center gap-1 rounded-md border border-white/20 px-3 py-1.5 text-sm hover:bg-white/10 disabled:opacity-30 transition-colors cursor-pointer"
+          className="flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-surface-raised disabled:opacity-30 transition-colors cursor-pointer"
         >
           Next <ChevronRight size={16} />
         </button>

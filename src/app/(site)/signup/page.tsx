@@ -49,7 +49,7 @@ export default function SignupPage() {
     <div className="flex-1 flex items-center justify-center px-4 py-16">
       <div className="w-full max-w-sm">
         <h1 className="text-2xl font-semibold tracking-tight mb-1">Create an account</h1>
-        <p className="text-sm text-foreground/60 mb-6">
+        <p className="text-sm text-foreground-secondary mb-6">
           Track your progress through every course.
         </p>
 
@@ -65,7 +65,7 @@ export default function SignupPage() {
               autoComplete="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent"
+              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
 
@@ -80,7 +80,7 @@ export default function SignupPage() {
               autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent"
+              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
 
@@ -96,23 +96,23 @@ export default function SignupPage() {
               autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent"
+              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent"
             />
-            <p className="text-xs text-foreground/50 mt-1">At least 8 characters.</p>
+            <p className="text-xs text-muted mt-1">At least 8 characters.</p>
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-error">{error}</p>}
 
           <button
             type="submit"
             disabled={submitting}
-            className="w-full rounded-md bg-accent text-white py-2 text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
+            className="w-full rounded-lg bg-accent text-accent-foreground py-2 text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 cursor-pointer"
           >
             {submitting ? "Creating account…" : "Create account"}
           </button>
         </form>
 
-        <p className="text-sm text-foreground/60 mt-6">
+        <p className="text-sm text-foreground-secondary mt-6">
           Already have an account?{" "}
           <Link href="/login" className="text-accent hover:underline">
             Sign in

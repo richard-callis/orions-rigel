@@ -1,38 +1,81 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/*
+ * Orion dark theme — ops-dashboard aesthetic, dark-mode only.
+ * Flat, minimal, high-contrast. No gradients, no drop shadows beyond
+ * subtle 1px borders.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --accent: #2563eb;
-  --surface: #f8fafc;
-  --border: #e2e8f0;
+  --background: #0f0f0f;
+  --foreground: #e6e6e6;
+  --foreground-secondary: #b8b8b8;
+  --muted: #8a8a8a;
+
+  --surface: #1a1a1a;
+  --surface-raised: #242424;
+  --border: #2a2a2a;
+
+  --accent: #00a7e1;
+  --accent-foreground: #ffffff;
+  --warning: #ffa630;
+  --success: #22c55e;
+  --error: #ef4444;
+  --info: #3b82f6;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --color-accent: var(--accent);
+  --color-foreground-secondary: var(--foreground-secondary);
+  --color-muted: var(--muted);
   --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
   --color-border: var(--border);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+  --color-error: var(--error);
+  --color-info: var(--info);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-jetbrains-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --accent: #60a5fa;
-    --surface: #111827;
-    --border: #1f2937;
-  }
+html {
+  color-scheme: dark;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Uppercase, tracked-out label for section headers / eyebrows. */
+.eyebrow {
+  font-family: var(--font-jetbrains-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Prose (lesson content) — pull Tailwind Typography's dark palette from
+   the Orion tokens so lesson/slide copy matches the rest of the app. */
+.prose-invert {
+  --tw-prose-invert-body: var(--foreground);
+  --tw-prose-invert-headings: #ffffff;
+  --tw-prose-invert-links: var(--accent);
+  --tw-prose-invert-bold: #ffffff;
+  --tw-prose-invert-bullets: var(--muted);
+  --tw-prose-invert-hr: var(--border);
+  --tw-prose-invert-quotes: var(--foreground-secondary);
+  --tw-prose-invert-quote-borders: var(--border);
+  --tw-prose-invert-captions: var(--muted);
+  --tw-prose-invert-code: var(--foreground);
+  --tw-prose-invert-th-borders: var(--border);
+  --tw-prose-invert-td-borders: var(--border);
 }
 
 .prose :where(code):not(:where([class~="not-prose"] *))::before,

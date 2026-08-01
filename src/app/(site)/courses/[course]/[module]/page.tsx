@@ -55,30 +55,28 @@ export default async function ModulePage({ params }: Props) {
       <div className="mb-6 flex items-center justify-between text-sm">
         <Link
           href={`/courses/${courseSlug}`}
-          className="flex items-center gap-1 text-foreground/60 hover:text-accent transition-colors"
+          className="flex items-center gap-1 text-foreground-secondary hover:text-accent transition-colors"
         >
           <ArrowLeft size={14} /> {course.title}
         </Link>
         <Link
           href={`/present/${courseSlug}/${moduleSlug}`}
           target="_blank"
-          className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+          className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 hover:bg-surface-raised transition-colors"
         >
           <Presentation size={14} /> Present
         </Link>
       </div>
 
       <div className="mb-6">
-        <span className="inline-block rounded-full bg-accent/10 px-2.5 py-0.5 text-xs font-medium text-accent mb-3">
-          {LEVEL_LABEL[mod.meta.level] ?? mod.meta.level}
-        </span>
+        <p className="eyebrow mb-3">{LEVEL_LABEL[mod.meta.level] ?? mod.meta.level}</p>
         <h1 className="text-3xl font-semibold tracking-tight mb-2">{mod.meta.title}</h1>
         {mod.meta.description && (
-          <p className="text-foreground/60 mb-4">{mod.meta.description}</p>
+          <p className="text-foreground-secondary mb-4">{mod.meta.description}</p>
         )}
         <div className="flex items-center gap-4">
           {mod.meta.duration && (
-            <span className="text-sm text-foreground/50">{mod.meta.duration}</span>
+            <span className="text-sm text-muted font-mono">{mod.meta.duration}</span>
           )}
           <MarkComplete
             courseSlug={courseSlug}
@@ -94,7 +92,7 @@ export default async function ModulePage({ params }: Props) {
         {prev ? (
           <Link
             href={`/courses/${courseSlug}/${prev.slug}`}
-            className="flex items-center gap-1 text-foreground/70 hover:text-accent transition-colors"
+            className="flex items-center gap-1 text-foreground-secondary hover:text-accent transition-colors"
           >
             <ArrowLeft size={14} /> {prev.title}
           </Link>
@@ -104,7 +102,7 @@ export default async function ModulePage({ params }: Props) {
         {next ? (
           <Link
             href={`/courses/${courseSlug}/${next.slug}`}
-            className="flex items-center gap-1 text-foreground/70 hover:text-accent transition-colors"
+            className="flex items-center gap-1 text-foreground-secondary hover:text-accent transition-colors"
           >
             {next.title} <ArrowRight size={14} />
           </Link>

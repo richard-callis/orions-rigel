@@ -47,10 +47,10 @@ export function MarkComplete({
     <button
       onClick={toggle}
       disabled={pending}
-      className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 ${
+      className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 ${
         completed
-          ? "border-green-600/30 bg-green-600/10 text-green-700 dark:text-green-400"
-          : "border-border hover:bg-black/5 dark:hover:bg-white/5"
+          ? "border-success/30 bg-success/10 text-success"
+          : "border-border hover:bg-surface-raised"
       }`}
     >
       {pending ? (

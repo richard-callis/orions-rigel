@@ -23,11 +23,11 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12">
+    <div className="w-full mx-auto max-w-3xl px-4 py-12">
       <h1 className="text-3xl font-semibold tracking-tight mb-1">
         Welcome back, {session.user.name?.split(" ")[0]}
       </h1>
-      <p className="text-foreground/60 mb-10">Here&apos;s where you left off.</p>
+      <p className="text-foreground-secondary mb-10">Here&apos;s where you left off.</p>
 
       <div className="space-y-4">
         {courses.map((course) => {
@@ -37,12 +37,12 @@ export default async function DashboardPage() {
           const pct = modules.length > 0 ? Math.round((completed.size / modules.length) * 100) : 0;
 
           return (
-            <div key={course.slug} className="rounded-lg border border-border p-5">
+            <div key={course.slug} className="rounded-xl border border-border bg-surface p-5">
               <div className="flex items-center justify-between mb-2">
                 <Link href={`/courses/${course.slug}`} className="font-semibold hover:text-accent transition-colors">
                   {course.title}
                 </Link>
-                <span className="text-sm text-foreground/50">
+                <span className="text-sm text-muted font-mono">
                   {completed.size} / {modules.length} complete
                 </span>
               </div>
@@ -54,7 +54,7 @@ export default async function DashboardPage() {
               {nextModule && (
                 <Link
                   href={`/courses/${course.slug}/${nextModule.slug}`}
-                  className="inline-block rounded-md bg-accent text-white text-sm px-3 py-1.5 hover:opacity-90 transition-opacity"
+                  className="inline-block rounded-lg bg-accent text-accent-foreground text-sm px-3 py-1.5 font-medium hover:opacity-90 transition-opacity"
                 >
                   {completed.size === 0 ? "Start" : "Continue"}: {nextModule.title}
                 </Link>
@@ -64,7 +64,7 @@ export default async function DashboardPage() {
         })}
 
         {courses.length === 0 && (
-          <p className="text-foreground/50">No courses published yet.</p>
+          <p className="text-muted">No courses published yet.</p>
         )}
       </div>
     </div>
