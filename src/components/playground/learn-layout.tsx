@@ -4,7 +4,13 @@ import { useMemo, useRef, type ReactNode } from "react";
 import { PlaygroundContext } from "@/lib/playground-context";
 import { SqlConsole, type SqlConsoleHandle } from "./sql-console";
 
-export function LearnLayout({ children }: { children: ReactNode }) {
+export function LearnLayout({
+  children,
+  courseSlug,
+}: {
+  children: ReactNode;
+  courseSlug: string;
+}) {
   const consoleRef = useRef<SqlConsoleHandle>(null);
 
   const contextValue = useMemo(
@@ -21,7 +27,7 @@ export function LearnLayout({ children }: { children: ReactNode }) {
           <div className="w-full mx-auto max-w-2xl">{children}</div>
         </div>
         <div className="lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] border-t lg:border-t-0 border-border bg-surface">
-          <SqlConsole ref={consoleRef} />
+          <SqlConsole ref={consoleRef} courseSlug={courseSlug} />
         </div>
       </div>
     </PlaygroundContext.Provider>

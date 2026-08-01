@@ -11,7 +11,8 @@ deck for teaching — same content, no separate slides to maintain.
   WASM) runs a real, isolated Postgres instance in each learner's browser tab,
   seeded from `public/sql/schema.sql`. No shared server, no rate limits,
   nothing for one student to break for another. Code blocks in a lesson can be
-  run directly against it or copied into your own queries.
+  run directly against it or copied into your own queries. Signed-in users
+  can save queries they write and reload them later.
 - **Presentation mode** — `/present/<course>/<module>` renders the same
   lesson as full-screen slides with keyboard navigation (arrow keys), split
   automatically from the lesson's `##`/`###` headings and `---` dividers.

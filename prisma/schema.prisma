@@ -25,7 +25,8 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  progress LessonProgress[]
+  progress     LessonProgress[]
+  savedQueries SavedQuery[]
 }
 
 // One row per (user, lesson) once the user marks it complete.
@@ -40,4 +41,18 @@ model LessonProgress {
 
   @@unique([userId, courseSlug, moduleSlug])
   @@index([userId])
+}
+
+// A SQL snippet a user saved from the practice console, to reload later.
+model SavedQuery {
+  id         String   @id @default(cuid())
+  userId     String
+  courseSlug String
+  title      String
+  sql        String
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, courseSlug])
 }

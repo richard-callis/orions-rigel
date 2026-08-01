@@ -51,7 +51,7 @@ export default async function ModulePage({ params }: Props) {
   }
 
   return (
-    <LearnLayout>
+    <LearnLayout courseSlug={courseSlug}>
       <div className="mb-6 flex items-center justify-between text-sm">
         <Link
           href={`/courses/${courseSlug}`}
