@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: training_app
+      POSTGRES_PASSWORD: training_dev_password
+      POSTGRES_DB: technical_training
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U training_app -d technical_training"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: applies pending Prisma migrations, then exits. `app` waits for
+  # this to succeed before it starts, so schema is always in sync on boot.
+  migrate:
+    build: .
+    command: ["npx", "prisma", "migrate", "deploy"]
+    environment:
+      DATABASE_URL: postgresql://training_app:training_dev_password@db:5432/technical_training?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://training_app:training_dev_password@db:5432/technical_training?schema=public
+      # Generate a real one for anything beyond local dev: openssl rand -base64 32
+      AUTH_SECRET: ${AUTH_SECRET:-dev-only-secret-change-me-1234567890abcdef}
+      # Needed so Auth.js trusts the host/proto it's reached through when
+      # sitting behind a reverse proxy or load balancer (see README).
+      AUTH_TRUST_HOST: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  db-data:

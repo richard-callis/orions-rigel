@@ -126,6 +126,92 @@ prisma/                 # schema + migrations for app data (users, progress)
 public/sql/             # schema(s) seeded into the in-browser PGlite database
 ```
 
+## Deployment
+
+The app is stateless (all persistent data lives in Postgres), reads its
+config entirely from environment variables at runtime, and ships as a single
+Docker image usable for both serving the app and running migrations — see
+`Dockerfile`.
+
+### Building the image
+
+CI builds and publishes the image automatically — see
+`.github/workflows/docker-build.yml`. Every push to `main` publishes
+`ghcr.io/richard-callis/technical-training:latest` (plus a `sha-<short>` tag);
+pushing a `vX.Y.Z` tag also publishes semver-tagged images. Pull requests
+build (but don't push) so a broken Dockerfile fails CI before merge.
+
+The first push creates the GHCR package as **private** by default. Either
+make it public (package settings on GitHub → "Change visibility") or create
+an `imagePullSecret` — see the comment in `k8s/deployment.yaml`.
+
+To build locally instead:
+
+```bash
+docker build -t technical-training .
+```
+
+### Docker Compose (single host)
+
+```bash
+cp .env.example .env   # only AUTH_SECRET is read from here by compose; see below
+docker compose up --build
+```
+
+This starts Postgres, runs `prisma migrate deploy` once (the `migrate`
+service), then starts the app on [http://localhost:3000](http://localhost:3000).
+Compose reads `AUTH_SECRET` from your shell environment (falling back to a
+dev-only default) — `export AUTH_SECRET="$(openssl rand -base64 32)"` before
+`docker compose up` for anything beyond local testing.
+
+### Kubernetes
+
+Manifests live in `k8s/`:
+
+| File | Purpose |
+|---|---|
+| `secret.example.yaml` | Template for `DATABASE_URL` / `AUTH_SECRET` — see the file for how to create the real Secret |
+| `deployment.yaml` | The app, 2 replicas, liveness/readiness probes, non-root |
+| `service.yaml` | ClusterIP Service in front of the Deployment |
+| `ingress.yaml` | Example nginx + cert-manager Ingress — adjust to your cluster |
+| `migrate-job.yaml` | One-off Job that runs `prisma migrate deploy` — apply before/with each release that adds migrations |
+| `postgres-dev.yaml` | A single-pod Postgres for dev/eval clusters only — use a managed database in production instead |
+
+Typical first deploy:
+
+```bash
+kubectl create secret generic technical-training-secrets \
+  --from-literal=DATABASE_URL='postgresql://user:pass@host:5432/technical_training?schema=public' \
+  --from-literal=AUTH_SECRET="$(openssl rand -base64 32)"
+
+# only if you don't have a database yet:
+kubectl apply -f k8s/postgres-dev.yaml
+
+kubectl apply -f k8s/migrate-job.yaml
+kubectl wait --for=condition=complete job/technical-training-migrate --timeout=120s
+
+kubectl apply -f k8s/deployment.yaml -f k8s/service.yaml -f k8s/ingress.yaml
+```
+
+### Environment variables (runtime, not build-time)
+
+| Variable | Required | Notes |
+|---|---|---|
+| `DATABASE_URL` | yes | Postgres connection string for app data (users, progress) |
+| `AUTH_SECRET` | yes | Auth.js session signing secret — `openssl rand -base64 32` |
+| `AUTH_TRUST_HOST` | behind a proxy/ingress | Set to `true` so Auth.js trusts `X-Forwarded-*` headers instead of rejecting the request's apparent origin |
+| `PORT` | no | Defaults to `3000`; set if your platform requires a different port |
+
+None of these are `NEXT_PUBLIC_`-prefixed, so the same image is safe to
+promote across environments (dev/staging/prod) without rebuilding.
+
+### Health checks
+
+- `GET /api/health` — liveness: process is up, no dependency check. A slow
+  or unreachable database should fail readiness, not get the pod killed.
+- `GET /api/health/ready` — readiness: also confirms the database is
+  reachable (`SELECT 1`).
+
 ## Notes on the app/(site) vs app/present split
 
 Next.js requires exactly one root layout (`<html>`/`<body>`) per top-level

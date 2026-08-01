@@ -1,0 +1,22 @@
+# Run once per deploy that includes new migrations:
+#   kubectl delete job technical-training-migrate --ignore-not-found
+#   kubectl apply -f k8s/migrate-job.yaml
+#   kubectl wait --for=condition=complete job/technical-training-migrate --timeout=120s
+# (Job names are immutable, hence the delete-then-apply — or template a
+# unique name per release if you're driving this from CI/CD.)
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: technical-training-migrate
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: ghcr.io/richard-callis/technical-training:latest
+          command: ["npx", "prisma", "migrate", "deploy"]
+          envFrom:
+            - secretRef:
+                name: technical-training-secrets

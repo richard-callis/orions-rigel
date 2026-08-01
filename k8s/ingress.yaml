@@ -1,0 +1,27 @@
+# Example only — the ingressClassName and cert-manager annotation assume an
+# nginx-ingress + cert-manager setup, which is common but not universal.
+# Adjust (or replace with your platform's Gateway API / LoadBalancer Service)
+# to match your cluster.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: technical-training
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - training.example.com
+      secretName: technical-training-tls
+  rules:
+    - host: training.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: technical-training
+                port:
+                  number: 80

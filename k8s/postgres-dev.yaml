@@ -1,0 +1,71 @@
+# Dev/eval only — a single Postgres pod with a PVC, no replication, backups,
+# or failover. Point DATABASE_URL in your Secret at "postgres-dev" if you
+# use this. For a real deployment, use a managed Postgres (RDS, Cloud SQL,
+# Azure Database for PostgreSQL, etc.) and skip this file entirely.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-dev-data
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres-dev
+  labels:
+    app: postgres-dev
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: postgres-dev
+  template:
+    metadata:
+      labels:
+        app: postgres-dev
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: training_app
+            # Dev/eval only, hence the plaintext value. Make sure this
+            # matches the password embedded in DATABASE_URL in your Secret
+            # (k8s/secret.example.yaml) — e.g. postgresql://training_app:CHANGE-ME@postgres-dev:5432/...
+            - name: POSTGRES_PASSWORD
+              value: "CHANGE-ME"
+            - name: POSTGRES_DB
+              value: technical_training
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+              subPath: postgres
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "training_app", "-d", "technical_training"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: postgres-dev-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-dev
+spec:
+  selector:
+    app: postgres-dev
+  ports:
+    - port: 5432
+      targetPort: 5432

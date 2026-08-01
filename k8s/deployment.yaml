@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: technical-training
+  labels:
+    app: technical-training
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: technical-training
+  template:
+    metadata:
+      labels:
+        app: technical-training
+    spec:
+      # If the ghcr.io package is private, create a pull secret and uncomment:
+      #   kubectl create secret docker-registry ghcr-pull-secret \
+      #     --docker-server=ghcr.io --docker-username=<gh-username> \
+      #     --docker-password=<gh-pat-with-read:packages>
+      # imagePullSecrets:
+      #   - name: ghcr-pull-secret
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+      containers:
+        - name: app
+          image: ghcr.io/richard-callis/technical-training:latest
+          ports:
+            - containerPort: 3000
+          env:
+            - name: PORT
+              value: "3000"
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            # Trust X-Forwarded-* headers from the Ingress/load balancer in
+            # front of this pod — otherwise Auth.js rejects the request's
+            # apparent origin. See README's deployment section.
+            - name: AUTH_TRUST_HOST
+              value: "true"
+          envFrom:
+            - secretRef:
+                name: technical-training-secrets
+          readinessProbe:
+            httpGet:
+              path: /api/health/ready
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
