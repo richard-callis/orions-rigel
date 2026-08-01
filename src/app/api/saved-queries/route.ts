@@ -25,7 +25,7 @@ export async function GET(request: Request) {
 const createSchema = z.object({
   courseSlug: z.string().min(1),
   title: z.string().trim().min(1, "Title is required").max(100),
-  sql: z.string().min(1, "Query is empty"),
+  content: z.string().min(1, "Query is empty"),
 });
 
 export async function POST(request: Request) {

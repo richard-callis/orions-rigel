@@ -1,6 +1,7 @@
 // Prisma schema for the technical training platform.
 // Course/lesson content itself lives in src/content/ as MDX files —
-// this schema only models accounts and per-user progress.
+// this schema only models accounts, per-user progress, and live-session
+// state (instructor-driven slide position, pop quizzes).
 
 generator client {
   provider = "prisma-client"
@@ -25,8 +26,9 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  progress     LessonProgress[]
-  savedQueries SavedQuery[]
+  progress      LessonProgress[]
+  savedQueries  SavedQuery[]
+  quizResponses QuizResponse[]
 }
 
 // One row per (user, lesson) once the user marks it complete.
@@ -43,16 +45,65 @@ model LessonProgress {
   @@index([userId])
 }
 
-// A SQL snippet a user saved from the practice console, to reload later.
+// A snippet a user saved from the practice console (SQL or, for a
+// yaml-sandbox course, a Kubernetes manifest) to reload later.
 model SavedQuery {
   id         String   @id @default(cuid())
   userId     String
   courseSlug String
   title      String
-  sql        String
+  content    String
   createdAt  DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, courseSlug])
+}
+
+// An instructor "driving" a module's Presentation-mode slides live.
+// Non-instructor viewers polling this can't navigate past currentSlide —
+// see SlideDeck. Only one row should be isActive per (courseSlug,
+// moduleSlug) at a time; starting a new session should close any prior one.
+model LiveSession {
+  id           String    @id @default(cuid())
+  courseSlug   String
+  moduleSlug   String
+  instructorId String
+  currentSlide Int       @default(0)
+  isActive     Boolean   @default(true)
+  startedAt    DateTime  @default(now())
+  endedAt      DateTime?
+  updatedAt    DateTime  @updatedAt
+
+  @@index([courseSlug, moduleSlug, isActive])
+}
+
+// One activation of a <Quiz id="..."> authored in a module's MDX content.
+// The question/options/answer live in the content itself, not here — this
+// just tracks that it's "live" right now and collects responses.
+model ActiveQuiz {
+  id          String    @id @default(cuid())
+  courseSlug  String
+  moduleSlug  String
+  quizKey     String
+  activatedBy String
+  activatedAt DateTime  @default(now())
+  closedAt    DateTime?
+
+  responses QuizResponse[]
+
+  @@index([courseSlug, moduleSlug, quizKey])
+}
+
+model QuizResponse {
+  id            String   @id @default(cuid())
+  activeQuizId  String
+  userId        String
+  selectedIndex Int
+  answeredAt    DateTime @default(now())
+
+  activeQuiz ActiveQuiz @relation(fields: [activeQuizId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([activeQuizId, userId])
 }

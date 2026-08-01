@@ -1,0 +1,6 @@
+{
+  "title": "Kubernetes Fundamentals",
+  "tagline": "Write real manifests, catch the mistakes before kubectl does.",
+  "description": "A hands-on introduction to Kubernetes manifests — Pods, Deployments, Services, and config — with a validator that runs entirely in your browser and catches the same mistakes kubectl apply would reject, plus a few it wouldn't (like a Deployment whose selector doesn't match its own Pod template).",
+  "sandboxType": "yaml"
+}

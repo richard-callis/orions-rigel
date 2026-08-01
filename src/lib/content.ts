@@ -4,11 +4,15 @@ import matter from "gray-matter";
 
 const COURSES_DIR = path.join(process.cwd(), "src", "content", "courses");
 
+export type SandboxType = "sql" | "yaml";
+
 export type CourseMeta = {
   slug: string;
   title: string;
   description: string;
   tagline?: string;
+  /** Which practice console Learn view mounts for this course. Defaults to "sql". */
+  sandboxType?: SandboxType;
 };
 
 export type ModuleLevel = "setup" | "foundations" | "intermediate" | "mastery" | "reference";

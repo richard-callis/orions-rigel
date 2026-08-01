@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Check, Copy, Play } from "lucide-react";
+import { Check, Copy, Play, ShieldCheck } from "lucide-react";
 import { usePlayground } from "@/lib/playground-context";
 
 function textOf(node: ReactNode): string {
@@ -24,7 +24,13 @@ export function CodeBlock({
   const language = className?.replace("language-", "") ?? "";
   const code = textOf(children).replace(/\n$/, "");
 
-  const canRun = playground !== null && (language === "sql" || language === "");
+  const canRun =
+    playground !== null &&
+    (playground.kind === "yaml"
+      ? language === "yaml" || language === "yml"
+      : language === "sql" || language === "");
+  const actionLabel = playground?.kind === "yaml" ? "Validate" : "Run";
+  const ActionIcon = playground?.kind === "yaml" ? ShieldCheck : Play;
 
   async function handleCopy() {
     await navigator.clipboard.writeText(code);
@@ -41,9 +47,9 @@ export function CodeBlock({
             <button
               onClick={() => playground!.runQuery(code)}
               className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-foreground-secondary hover:bg-foreground/10 hover:text-foreground transition-colors cursor-pointer"
-              title="Run in console"
+              title={`${actionLabel} in console`}
             >
-              <Play size={12} /> Run
+              <ActionIcon size={12} /> {actionLabel}
             </button>
           )}
           <button

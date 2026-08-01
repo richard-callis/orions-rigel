@@ -3,21 +3,26 @@
 import { useMemo, useRef, type ReactNode } from "react";
 import { PlaygroundContext } from "@/lib/playground-context";
 import { SqlConsole, type SqlConsoleHandle } from "./sql-console";
+import { YamlConsole, type YamlConsoleHandle } from "./yaml-console";
+import type { SandboxType } from "@/lib/content";
 
 export function LearnLayout({
   children,
   courseSlug,
+  sandboxType = "sql",
 }: {
   children: ReactNode;
   courseSlug: string;
+  sandboxType?: SandboxType;
 }) {
-  const consoleRef = useRef<SqlConsoleHandle>(null);
+  const consoleRef = useRef<SqlConsoleHandle | YamlConsoleHandle>(null);
 
   const contextValue = useMemo(
     () => ({
-      runQuery: (sqlText: string) => consoleRef.current?.runQuery(sqlText),
+      kind: sandboxType,
+      runQuery: (text: string) => consoleRef.current?.runQuery(text),
     }),
-    []
+    [sandboxType]
   );
 
   return (
@@ -27,7 +32,11 @@ export function LearnLayout({
           <div className="w-full mx-auto max-w-2xl">{children}</div>
         </div>
         <div className="lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] border-t lg:border-t-0 border-border bg-surface">
-          <SqlConsole ref={consoleRef} courseSlug={courseSlug} />
+          {sandboxType === "yaml" ? (
+            <YamlConsole ref={consoleRef} courseSlug={courseSlug} />
+          ) : (
+            <SqlConsole ref={consoleRef} courseSlug={courseSlug} />
+          )}
         </div>
       </div>
     </PlaygroundContext.Provider>

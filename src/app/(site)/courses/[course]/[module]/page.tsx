@@ -51,7 +51,7 @@ export default async function ModulePage({ params }: Props) {
   }
 
   return (
-    <LearnLayout courseSlug={courseSlug}>
+    <LearnLayout courseSlug={courseSlug} sandboxType={course.sandboxType}>
       <div className="mb-6 flex items-center justify-between text-sm">
         <Link
           href={`/courses/${courseSlug}`}

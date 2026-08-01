@@ -1,0 +1,204 @@
+---
+title: "Writing Manifests"
+description: "Pods, Deployments, and Services — and the mistakes that don't show up until kubectl apply."
+level: "foundations"
+duration: "45-60 min"
+---
+
+There's no real cluster behind this console — Kubernetes can't run
+client-side the way Postgres can. What runs here instead is a **structural
+validator**: paste a manifest, hit Validate, and it checks the same things
+`kubectl apply` would reject (missing required fields, a Job with the wrong
+restart policy) plus a few things `kubectl apply` would happily accept and
+then quietly fail on later (a Deployment whose selector doesn't match its
+own Pod template, an image with no pinned tag). It's not a replacement for
+testing against a real cluster — it's a fast first pass that catches the
+mistakes people make most often while still learning the shape of these
+files.
+
+---
+
+## 1. A Pod, the smallest deployable unit
+
+Every workload resource in Kubernetes eventually comes down to a Pod — one
+or more containers that share networking and storage. You'll rarely create
+bare Pods directly in practice (Deployments manage them for you), but
+understanding their shape first makes everything built on top of them make
+sense.
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: hello-world
+spec:
+  containers:
+    - name: app
+      image: nginx:1.27
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+```
+
+Hit Validate on this one — it's clean. Every field here is required for a
+reason: `apiVersion` + `kind` tell the API server which schema to use,
+`metadata.name` identifies the object, and `spec.containers` needs at least
+one entry with a `name` and an `image`.
+
+### Try it yourself
+
+Paste this into the console and validate it — it's missing something:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: broken
+spec:
+  containers:
+    - image: redis:7
+```
+
+The validator should flag the missing container `name`. Fix it, then try
+removing `image` entirely and see what changes.
+
+---
+
+## 2. Deployments — and the bug you can't see by reading
+
+A Deployment doesn't run Pods directly — it manages a **ReplicaSet**, which
+manages Pods, using a Pod template plus a `selector` to know which Pods
+belong to it. Here's the single most common mistake in hand-written
+Deployment YAML:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: webapp
+    spec:
+      containers:
+        - name: app
+          image: nginx:latest
+```
+
+Validate this one. Nothing about it *looks* wrong at a glance — but
+`spec.selector.matchLabels` says `app: web` while
+`spec.template.metadata.labels` says `app: webapp`. Kubernetes actually
+**rejects this at apply time** with an error about the selector not
+matching the template (unlike some of the other issues here, which apply
+cleanly and fail later) — but the error message doesn't make it obvious
+*why*, and it's the kind of one-character mismatch that's easy to stare at
+without seeing. The validator also flags the `:latest` tag and the missing
+`resources` block on the container — fix the label first, then those two.
+
+**Why this matters practically:** `selector` is intentionally immutable
+after creation specifically because getting it wrong is this common and
+this disruptive — if Kubernetes let you casually change which Pods a
+Deployment "owns," you could orphan running Pods without meaning to.
+
+### Try it yourself
+
+Fix the label mismatch above, pin the image tag, and add a `resources`
+block, then validate again until you get a clean "Looks good."
+
+---
+
+## 3. Services — routing to nothing, on purpose or by accident
+
+A Service routes traffic to Pods matching a label `selector`. Validate
+this:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8080
+```
+
+No `spec.selector` — the validator warns, but doesn't error, because this
+is occasionally intentional (a headless Service with manually managed
+Endpoints, or an `ExternalName` Service). Most of the time, though, a
+missing selector means "I forgot it," and the Service silently has zero
+endpoints — `kubectl apply` accepts it without complaint, and you find out
+it's broken only when nothing can reach the Pods you meant to expose.
+
+Add `selector: { app: web }` and validate again — the warning should
+clear.
+
+---
+
+## 4. ConfigMap and Secret — same shape, different purpose
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+data:
+  LOG_LEVEL: "info"
+  FEATURE_FLAG_NEW_UI: "false"
+```
+
+`Secret` looks identical in structure (`data` or `stringData` instead of
+just `data`) — the real difference is that Secret values are base64-encoded
+at rest and (depending on your cluster's configuration) may be encrypted;
+ConfigMap values are always stored as plain text. Neither is encrypted
+*in the YAML file itself*, though — treat a Secret manifest with real
+values in version control exactly like you'd treat a plaintext password
+file, because that's what it is.
+
+---
+
+## Wrap-up
+
+Validate one more, deliberately broken in three ways — see if you can spot
+all of them before reading the validator's output:
+
+```yaml
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api-server
+    spec:
+      containers:
+        - name: api
+          image: myorg/api
+```
+
+<details>
+<summary>What the validator should catch</summary>
+
+1. `apiVersion: extensions/v1beta1` is deprecated — should be `apps/v1`.
+2. `matchLabels` (`app: api`) doesn't match the template's labels
+   (`app: api-server`).
+3. `image: myorg/api` has no tag at all, which behaves like `:latest` —
+   same non-reproducibility problem.
+
+</details>

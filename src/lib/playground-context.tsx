@@ -1,10 +1,12 @@
 "use client";
 
 import { createContext, useContext } from "react";
+import type { SandboxType } from "@/lib/content";
 
 type PlaygroundContextValue = {
-  /** Send a snippet from the lesson straight into the live SQL console. */
-  runQuery: (sql: string) => void;
+  kind: SandboxType;
+  /** Send a snippet from the lesson straight into the live console (run SQL, or validate YAML). */
+  runQuery: (text: string) => void;
 };
 
 export const PlaygroundContext = createContext<PlaygroundContextValue | null>(null);
