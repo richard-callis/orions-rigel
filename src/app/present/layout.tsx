@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono, Source_Serif_4 } from "next/font/google";
 import "../globals.css";
 import { auth } from "@/lib/auth";
 import { AuthSessionProvider } from "@/components/session-provider";
@@ -12,6 +12,14 @@ const inter = Inter({
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
   subsets: ["latin"],
+});
+
+// Display serif for slide titles — gives Presentation mode its own
+// editorial identity, distinct from the sans-only site chrome.
+const sourceSerif = Source_Serif_4({
+  variable: "--font-source-serif",
+  subsets: ["latin"],
+  weight: ["600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -30,9 +38,9 @@ export default async function PresentRootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${jetbrainsMono.variable} ${sourceSerif.variable} h-full antialiased`}
     >
-      <body className="h-full bg-background">
+      <body className="theme-brew h-full bg-background">
         <AuthSessionProvider session={session}>{children}</AuthSessionProvider>
       </body>
     </html>

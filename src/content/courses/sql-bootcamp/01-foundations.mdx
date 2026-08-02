@@ -119,13 +119,17 @@ EXPLAIN ANALYZE SELECT * FROM orders WHERE customer_id = 5;
 -- re-run — watch the plan node change
 ```
 
-**Honest caveat, say it out loud:** on a table this small (dozens of rows),
-Postgres may still pick a sequential scan even with the index present,
-because reading the whole tiny table really is cheaper than the tree
-traversal overhead. This is correct behavior, not a bug — the planner is
-cost-based, not rule-based. The *shape* of the plan is the teaching point;
-real timing differences show up at real data volumes. Module 3 goes much
-deeper on reading these plans.
+<Callout label="Honest caveat, say it out loud">
+
+On a table this small (dozens of rows), Postgres may still pick a
+sequential scan even with the index present, because reading the whole
+tiny table really is cheaper than the tree traversal overhead. This is
+correct behavior, not a bug — the planner is cost-based, not rule-based.
+The *shape* of the plan is the teaching point; real timing differences
+show up at real data volumes. Module 3 goes much deeper on reading these
+plans.
+
+</Callout>
 
 <Quiz
   id="what-does-an-index-speed-up"

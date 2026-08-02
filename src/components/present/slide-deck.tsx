@@ -15,6 +15,7 @@ type LiveSessionState = {
 export function SlideDeck({
   slides,
   title,
+  courseTitle,
   exitHref,
   courseSlug,
   moduleSlug,
@@ -22,6 +23,7 @@ export function SlideDeck({
 }: {
   slides: ReactNode[];
   title: string;
+  courseTitle: string;
   exitHref: string;
   courseSlug: string;
   moduleSlug: string;
@@ -179,52 +181,48 @@ export function SlideDeck({
         </div>
       )}
 
-      <div className="flex items-center justify-between px-6 py-3">
-        <span className="eyebrow">{title}</span>
-        <div className="flex items-center gap-4">
-          {isInstructor && (
-            <>
-              {liveActive && ownedByMe ? (
+      <div className="flex items-center justify-end gap-4 px-6 py-3">
+        {isInstructor && (
+          <>
+            {liveActive && ownedByMe ? (
+              <button
+                onClick={endLive}
+                disabled={pending}
+                className="flex items-center gap-1.5 rounded-lg border border-error/30 bg-error/10 px-2.5 py-1 text-xs font-medium text-error hover:bg-error/20 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Radio size={12} className="animate-pulse" /> End session
+              </button>
+            ) : (
+              <>
+                {liveActive && !ownedByMe && (
+                  <span className="text-xs text-muted">Another instructor is live here</span>
+                )}
                 <button
-                  onClick={endLive}
+                  onClick={goLive}
                   disabled={pending}
-                  className="flex items-center gap-1.5 rounded-lg border border-error/30 bg-error/10 px-2.5 py-1 text-xs font-medium text-error hover:bg-error/20 transition-colors cursor-pointer disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-lg bg-accent px-2.5 py-1 text-xs font-medium text-accent-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
                 >
-                  <Radio size={12} className="animate-pulse" /> End session
+                  <Radio size={12} /> {liveActive && !ownedByMe ? "Take over" : "Go live"}
                 </button>
-              ) : (
-                <>
-                  {liveActive && !ownedByMe && (
-                    <span className="text-xs text-muted">Another instructor is live here</span>
-                  )}
-                  <button
-                    onClick={goLive}
-                    disabled={pending}
-                    className="flex items-center gap-1.5 rounded-lg bg-accent px-2.5 py-1 text-xs font-medium text-accent-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
-                  >
-                    <Radio size={12} /> {liveActive && !ownedByMe ? "Take over" : "Go live"}
-                  </button>
-                </>
-              )}
-            </>
-          )}
-          <span className="font-mono text-xs text-muted">
-            {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
-          </span>
-          <Link
-            href={exitHref}
-            className="flex items-center gap-1 text-sm text-muted hover:text-foreground transition-colors"
-          >
-            <X size={14} /> Exit
-          </Link>
-        </div>
+              </>
+            )}
+          </>
+        )}
+        <Link
+          href={exitHref}
+          className="flex items-center gap-1 text-sm text-muted hover:text-foreground transition-colors"
+        >
+          <X size={14} /> Exit
+        </Link>
       </div>
 
       <div className="flex-1 overflow-y-auto px-10 py-6 md:px-20">
         <div className="mx-auto max-w-4xl">{slides[index]}</div>
       </div>
 
-      <div className="flex items-center justify-center gap-6 pb-6">
+      <div className="relative flex items-center justify-center gap-6 px-6 pb-6">
+        <span className="eyebrow absolute left-6 hidden sm:inline">{courseTitle}</span>
+
         <button
           onClick={() => setIndex((i) => Math.max(i - 1, 0))}
           disabled={index === 0}
@@ -232,6 +230,9 @@ export function SlideDeck({
         >
           <ChevronLeft size={16} /> Prev
         </button>
+        <span className="font-mono text-xs text-muted" title={title}>
+          {String(index + 1).padStart(2, "0")} / {String(total).padStart(2, "0")}
+        </span>
         <button
           onClick={() => setIndex((i) => Math.min(i + 1, effectiveMax))}
           disabled={index >= effectiveMax}
@@ -239,6 +240,8 @@ export function SlideDeck({
         >
           Next <ChevronRight size={16} />
         </button>
+
+        <span className="eyebrow absolute right-6 hidden sm:inline">{title}</span>
       </div>
     </div>
   );

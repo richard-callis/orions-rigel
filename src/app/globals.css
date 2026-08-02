@@ -22,6 +22,41 @@
   --success: #22c55e;
   --error: #ef4444;
   --info: #3b82f6;
+
+  /* Code blocks get their own surface so Presentation mode can go darker
+     than its regular card background (a "terminal window" look) without
+     every other card following. Defaults to the regular raised surface. */
+  --code-bg: var(--surface-raised);
+  --font-heading: var(--font-inter);
+}
+
+/*
+ * Brew theme — warm, dark "coffee shop" aesthetic for Presentation mode,
+ * built to match a reference deck. Applied as a class (see
+ * src/app/present/layout.tsx) rather than swapping :root, so it layers on
+ * top of the same semantic tokens the rest of the app already uses —
+ * every component that reads --background/--accent/etc. re-skins itself
+ * automatically, no component-level branching required.
+ */
+.theme-brew {
+  --background: #15100c;
+  --foreground: #f5efe6;
+  --foreground-secondary: #b3a493;
+  --muted: #7a6c5b;
+
+  --surface: #2c2118;
+  --surface-raised: #3a2e22;
+  --border: #3a2e22;
+
+  --accent: #e3a857;
+  --accent-foreground: #15100c;
+  --warning: #f0a868;
+  --success: #3fb950;
+  --error: #e5534b;
+  --info: #c9a7eb;
+
+  --code-bg: #0d0a08;
+  --font-heading: var(--font-source-serif);
 }
 
 @theme inline {
@@ -38,8 +73,10 @@
   --color-success: var(--success);
   --color-error: var(--error);
   --color-info: var(--info);
+  --color-code-bg: var(--code-bg);
   --font-sans: var(--font-inter);
   --font-mono: var(--font-jetbrains-mono);
+  --font-heading: var(--font-heading);
 }
 
 html {
@@ -81,4 +118,16 @@ body {
 .prose :where(code):not(:where([class~="not-prose"] *))::before,
 .prose :where(code):not(:where([class~="not-prose"] *))::after {
   content: none;
+}
+
+/* Brew theme: cream (not pure white) headings/bold, and the serif display
+   font on headings — everything else in .prose-invert is inherited as-is. */
+.theme-brew .prose-invert {
+  --tw-prose-invert-headings: var(--foreground);
+  --tw-prose-invert-bold: var(--foreground);
+}
+
+.theme-brew .prose :where(h1, h2, h3) {
+  font-family: var(--font-heading);
+  letter-spacing: -0.01em;
 }
