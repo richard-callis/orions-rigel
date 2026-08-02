@@ -1,10 +1,13 @@
 import Link from "next/link";
-import { getCourses, getCourseModules } from "@/lib/content";
+import { getAllCourses, getAnyCourseModules } from "@/lib/content";
 
 export const metadata = { title: "Courses · Technical Training" };
 
-export default function CoursesPage() {
-  const courses = getCourses();
+export default async function CoursesPage() {
+  const courses = await getAllCourses();
+  const moduleCounts = await Promise.all(
+    courses.map((course) => getAnyCourseModules(course.slug))
+  );
 
   return (
     <div className="w-full mx-auto max-w-4xl px-4 py-12">
@@ -14,8 +17,8 @@ export default function CoursesPage() {
       </p>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {courses.map((course) => {
-          const modules = getCourseModules(course.slug);
+        {courses.map((course, i) => {
+          const modules = moduleCounts[i];
           return (
             <Link
               key={course.slug}
