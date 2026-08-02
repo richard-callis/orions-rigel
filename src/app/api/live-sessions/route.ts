@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { canInstruct } from "@/lib/roles";
 
 // Poll target for the presentation deck — both the instructor (to resume
 // their own session or notice a conflicting one) and viewers (to cap
@@ -29,7 +30,7 @@ const startSchema = z.object({
 
 export async function POST(request: Request) {
   const authSession = await auth();
-  if (authSession?.user?.role !== "INSTRUCTOR") {
+  if (!authSession?.user || !canInstruct(authSession.user.role)) {
     return NextResponse.json({ error: "Instructor only" }, { status: 403 });
   }
 

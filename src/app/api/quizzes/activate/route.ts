@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { canInstruct } from "@/lib/roles";
 
 const schema = z.object({
   courseSlug: z.string().min(1),
@@ -11,7 +12,7 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (session?.user?.role !== "INSTRUCTOR") {
+  if (!session?.user || !canInstruct(session.user.role)) {
     return NextResponse.json({ error: "Instructor only" }, { status: 403 });
   }
 

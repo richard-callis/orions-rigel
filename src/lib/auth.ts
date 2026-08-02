@@ -32,23 +32,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user, trigger, session }) {
+    async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
         token.role = (user as { role?: string }).role;
-      }
-      // Lets client code call the `update()` handle from useSession() to
-      // refresh the token without a full re-login — used by the instructor
-      // role toggle.
-      if (trigger === "update" && session?.role) {
-        token.role = session.role;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user) {
         session.user.id = token.id as string;
-        session.user.role = token.role as "STUDENT" | "INSTRUCTOR";
+        // Re-read the role from the DB on every session check rather than
+        // trusting the JWT's cached value — an admin assigning a role
+        // change to another user should take effect on that user's next
+        // request, not require them to sign out and back in. Falls back to
+        // the token's role if the user was deleted since the token issued.
+        const fresh = await db.user.findUnique({
+          where: { id: token.id as string },
+          select: { role: true },
+        });
+        session.user.role = fresh?.role ?? (token.role as "STUDENT" | "INSTRUCTOR" | "ADMIN");
       }
       return session;
     },
