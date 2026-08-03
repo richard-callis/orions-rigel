@@ -130,6 +130,34 @@ model ExerciseAttempt {
   @@index([userId])
 }
 
+// An anonymously-submitted question during a live session.
+// userId is plain (NOT a FK) to match the LiveSession/ActiveQuiz pattern —
+// ephemeral live-session data shouldn't cascade-delete when users are deleted.
+model LiveQuestion {
+  id          String   @id @default(cuid())
+  courseSlug  String
+  moduleSlug  String
+  text        String
+  userId      String
+  answered    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  upvotes LiveQuestionUpvote[]
+
+  @@index([courseSlug, moduleSlug, answered])
+}
+
+// User upvotes on a question. Can be deleted when the question is deleted.
+model LiveQuestionUpvote {
+  id         String @id @default(cuid())
+  questionId String
+  userId     String
+
+  question LiveQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, userId])
+}
+
 // Spaced-repetition review schedule for modules.
 // When a module is marked complete, a ReviewSchedule row is created/updated
 // with an initial review interval. Students can review on a simple SM-2-lite
