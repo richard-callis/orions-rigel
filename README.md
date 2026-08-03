@@ -202,6 +202,7 @@ kubectl apply -f k8s/deployment.yaml -f k8s/service.yaml -f k8s/ingress.yaml
 | `AUTH_SECRET` | yes | Auth.js session signing secret — `openssl rand -base64 32` |
 | `AUTH_TRUST_HOST` | behind a proxy/ingress | Set to `true` so Auth.js trusts `X-Forwarded-*` headers instead of rejecting the request's apparent origin |
 | `PORT` | no | Defaults to `3000`; set if your platform requires a different port |
+| `ADMIN_EMAILS` | no | Comma-separated list of email addresses that become `ADMIN` on signup, regardless of signup order. The very first account ever created also becomes `ADMIN` automatically (so a fresh deployment always has someone who can assign roles), even without this set. Admins assign STUDENT/INSTRUCTOR/ADMIN roles to other users from `/admin/users` — there's no self-service role picker. |
 
 None of these are `NEXT_PUBLIC_`-prefixed, so the same image is safe to
 promote across environments (dev/staging/prod) without rebuilding.
