@@ -29,6 +29,31 @@ export async function POST(request: Request) {
     update: {},
   });
 
+  // Create or reschedule review for spaced repetition.
+  // Initial review is due after 1 day.
+  const dueAt = new Date();
+  dueAt.setDate(dueAt.getDate() + 1);
+
+  await db.reviewSchedule.upsert({
+    where: {
+      userId_courseSlug_moduleSlug: { userId: session.user.id, courseSlug, moduleSlug },
+    },
+    create: {
+      userId: session.user.id,
+      courseSlug,
+      moduleSlug,
+      dueAt,
+      intervalDays: 1,
+      reviewCount: 0,
+    },
+    update: {
+      dueAt,
+      intervalDays: 1,
+      reviewCount: 0,
+      lastReviewedAt: null,
+    },
+  });
+
   return NextResponse.json({ completed: true });
 }
 

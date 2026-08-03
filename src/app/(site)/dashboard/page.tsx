@@ -27,6 +27,15 @@ export default async function DashboardPage() {
     completedDates.push(p.completedAt);
   }
 
+  // Count pending reviews
+  const now = new Date();
+  const pendingReviewCount = await db.reviewSchedule.count({
+    where: {
+      userId: session.user.id,
+      dueAt: { lte: now },
+    },
+  });
+
   const { currentStreak, totalActiveDays, thisWeekCompletions } = getStreaks(completedDates);
 
   return (
@@ -36,6 +45,13 @@ export default async function DashboardPage() {
           Welcome back, {session.user.name?.split(" ")[0]}
         </h1>
         <p className="text-foreground-secondary">Here&apos;s where you left off.</p>
+        {pendingReviewCount > 0 && (
+          <p className="text-sm text-accent font-medium mt-2">
+            <a href="/review" className="hover:underline">
+              {pendingReviewCount} module{pendingReviewCount === 1 ? "" : "s"} due for review
+            </a>
+          </p>
+        )}
       </div>
 
       {/* Engagement stats */}

@@ -25,6 +25,9 @@ export function Navbar() {
               <Link href="/dashboard" className="hover:text-accent transition-colors">
                 Dashboard
               </Link>
+              <Link href="/review" className="hover:text-accent transition-colors">
+                Review
+              </Link>
               {canInstruct(session.user?.role) && (
                 <Link href="/admin/create-training" className="hover:text-accent transition-colors">
                   Create training
