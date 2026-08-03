@@ -26,9 +26,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  progress      LessonProgress[]
-  savedQueries  SavedQuery[]
-  quizResponses QuizResponse[]
+  progress         LessonProgress[]
+  savedQueries     SavedQuery[]
+  quizResponses    QuizResponse[]
+  exerciseAttempts ExerciseAttempt[]
 }
 
 // One row per (user, lesson) once the user marks it complete.
@@ -106,4 +107,20 @@ model QuizResponse {
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([activeQuizId, userId])
+}
+
+// A record of a student's attempt to solve an exercise (SQL or YAML).
+// The exercise definition (prompt, reference query, checks) lives in the
+// MDX content itself; this only tracks whether they passed.
+model ExerciseAttempt {
+  id          String   @id @default(cuid())
+  userId      String
+  exerciseKey String   // synthetic key: ${courseSlug}:${moduleSlug}:${exerciseId}
+  passed      Boolean
+  attemptedAt DateTime @default(now()) @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, exerciseKey])
+  @@index([userId])
 }

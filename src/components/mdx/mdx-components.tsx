@@ -2,10 +2,12 @@ import type { MDXRemoteProps } from "next-mdx-remote/rsc";
 import { CodeBlock, InlineCode } from "./code-block";
 import { Quiz } from "./quiz";
 import { Callout } from "./callout";
+import { Exercise } from "./exercise";
 
 export const mdxComponents: NonNullable<MDXRemoteProps["components"]> = {
   Quiz,
   Callout,
+  Exercise,
   // Fenced code blocks arrive as <pre><code className="language-xxx">...</code></pre>.
   // Un-wrap `pre` and let `code` render the full card — this keeps className/children
   // as plain, stable props instead of reaching into a nested element from `pre`.
