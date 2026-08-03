@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Check, Circle } from "lucide-react";
-import { getCourse, getCourseModules } from "@/lib/content";
+import { getAnyCourse, getAnyCourseModules } from "@/lib/content";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 
@@ -9,7 +9,7 @@ type Props = { params: Promise<{ course: string }> };
 
 export async function generateMetadata({ params }: Props) {
   const { course: courseSlug } = await params;
-  const course = getCourse(courseSlug);
+  const course = await getAnyCourse(courseSlug);
   return { title: course ? `${course.title} · Technical Training` : "Not found" };
 }
 
@@ -24,9 +24,9 @@ const LEVEL_LABEL: Record<string, string> = {
 export default async function CourseOverviewPage({ params }: Props) {
   const { course: courseSlug } = await params;
 
-  const course = getCourse(courseSlug);
-  const modules = getCourseModules(courseSlug);
+  const course = await getAnyCourse(courseSlug);
   if (!course) notFound();
+  const modules = await getAnyCourseModules(courseSlug);
 
   const session = await auth();
   let completedSlugs = new Set<string>();

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, History, Presentation } from "lucide-react";
-import { getCourse, getModule, getModuleNeighbors } from "@/lib/content";
+import { getAnyCourse, getAnyModule, getAnyModuleNeighbors } from "@/lib/content";
 import { Lesson } from "@/components/mdx/lesson";
 import { LearnLayout } from "@/components/playground/learn-layout";
 import { MarkComplete } from "@/components/mark-complete";
@@ -14,7 +14,7 @@ type Props = {
 
 export async function generateMetadata({ params }: Props) {
   const { course: courseSlug, module: moduleSlug } = await params;
-  const mod = getModule(courseSlug, moduleSlug);
+  const mod = await getAnyModule(courseSlug, moduleSlug);
   return { title: mod ? `${mod.meta.title} · Technical Training` : "Not found" };
 }
 
@@ -29,11 +29,11 @@ const LEVEL_LABEL: Record<string, string> = {
 export default async function ModulePage({ params }: Props) {
   const { course: courseSlug, module: moduleSlug } = await params;
 
-  const course = getCourse(courseSlug);
-  const mod = getModule(courseSlug, moduleSlug);
+  const course = await getAnyCourse(courseSlug);
+  const mod = await getAnyModule(courseSlug, moduleSlug);
   if (!course || !mod) notFound();
 
-  const { prev, next } = getModuleNeighbors(courseSlug, moduleSlug);
+  const { prev, next } = await getAnyModuleNeighbors(courseSlug, moduleSlug);
 
   const pastSessions = await db.liveSession.findMany({
     where: { courseSlug, moduleSlug, isActive: false },
@@ -109,7 +109,12 @@ export default async function ModulePage({ params }: Props) {
         )}
       </div>
 
-      <Lesson content={mod.content} courseSlug={courseSlug} moduleSlug={moduleSlug} />
+      <Lesson
+        content={mod.content}
+        courseSlug={courseSlug}
+        moduleSlug={moduleSlug}
+        trusted={mod.trusted}
+      />
 
       <div className="mt-10 flex items-center justify-between border-t border-border pt-6 text-sm">
         {prev ? (
