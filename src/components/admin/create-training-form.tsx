@@ -38,6 +38,10 @@ export function CreateTrainingForm() {
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<ReviewState | null>(null);
+  // Whether the slug has been edited directly, as opposed to only ever
+  // having been derived from the title — see updateTitleAndSlug.
+  const [courseSlugTouched, setCourseSlugTouched] = useState(false);
+  const [moduleSlugTouched, setModuleSlugTouched] = useState(false);
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
@@ -55,6 +59,8 @@ export function CreateTrainingForm() {
         return;
       }
       const d: GeneratedDraft = body.draft;
+      setCourseSlugTouched(false);
+      setModuleSlugTouched(false);
       setDraft({
         ...d,
         courseSlug: slugify(d.courseTitle),
@@ -69,6 +75,8 @@ export function CreateTrainingForm() {
 
   function handleWriteManually() {
     setError(null);
+    setCourseSlugTouched(false);
+    setModuleSlugTouched(false);
     setDraft({ ...BLANK_DRAFT, level });
   }
 
@@ -76,18 +84,20 @@ export function CreateTrainingForm() {
     setDraft((d) => (d ? { ...d, [key]: value } : d));
   }
 
-  // Keep the slug in sync with the title until the slug is edited by hand —
-  // otherwise a manually-written draft has two required-but-unmarked slug
-  // fields that silently 400 on publish if left blank.
+  // Keep the slug in sync with the title until the slug is edited directly
+  // (see the slug Field's own onChange, which flips *Touched) — otherwise a
+  // manually-written draft has two required-but-unmarked slug fields that
+  // silently 400 on publish if left blank.
   function updateTitleAndSlug(
     titleKey: "courseTitle" | "moduleTitle",
     slugKey: "courseSlug" | "moduleSlug",
+    touched: boolean,
     value: string,
   ) {
     setDraft((d) => {
       if (!d) return d;
       const next = { ...d, [titleKey]: value };
-      if (!d[slugKey]) next[slugKey] = slugify(value);
+      if (!touched) next[slugKey] = slugify(value);
       return next;
     });
   }
@@ -199,12 +209,15 @@ export function CreateTrainingForm() {
         <Field
           label="Title"
           value={draft.courseTitle}
-          onChange={(v) => updateTitleAndSlug("courseTitle", "courseSlug", v)}
+          onChange={(v) => updateTitleAndSlug("courseTitle", "courseSlug", courseSlugTouched, v)}
         />
         <Field
           label="URL slug"
           value={draft.courseSlug}
-          onChange={(v) => updateDraft("courseSlug", slugify(v))}
+          onChange={(v) => {
+            setCourseSlugTouched(true);
+            updateDraft("courseSlug", slugify(v));
+          }}
           mono
         />
         <Field
@@ -225,12 +238,15 @@ export function CreateTrainingForm() {
         <Field
           label="Title"
           value={draft.moduleTitle}
-          onChange={(v) => updateTitleAndSlug("moduleTitle", "moduleSlug", v)}
+          onChange={(v) => updateTitleAndSlug("moduleTitle", "moduleSlug", moduleSlugTouched, v)}
         />
         <Field
           label="URL slug"
           value={draft.moduleSlug}
-          onChange={(v) => updateDraft("moduleSlug", slugify(v))}
+          onChange={(v) => {
+            setModuleSlugTouched(true);
+            updateDraft("moduleSlug", slugify(v));
+          }}
           mono
         />
         <Field
