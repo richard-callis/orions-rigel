@@ -5,6 +5,7 @@ import { getCourse, getModule, getModuleNeighbors } from "@/lib/content";
 import { Lesson } from "@/components/mdx/lesson";
 import { LearnLayout } from "@/components/playground/learn-layout";
 import { MarkComplete } from "@/components/mark-complete";
+import { LessonFeedback } from "@/components/lesson-feedback";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 
@@ -37,6 +38,9 @@ export default async function ModulePage({ params }: Props) {
 
   const session = await auth();
   let initiallyCompleted = false;
+  let initialFeedbackRating: number | null = null;
+  let initialFeedbackComment: string | null = null;
+
   if (session?.user) {
     const progress = await db.lessonProgress.findUnique({
       where: {
@@ -48,6 +52,20 @@ export default async function ModulePage({ params }: Props) {
       },
     });
     initiallyCompleted = Boolean(progress);
+
+    const feedback = await db.lessonFeedback.findUnique({
+      where: {
+        userId_courseSlug_moduleSlug: {
+          userId: session.user.id,
+          courseSlug,
+          moduleSlug,
+        },
+      },
+    });
+    if (feedback) {
+      initialFeedbackRating = feedback.rating;
+      initialFeedbackComment = feedback.comment;
+    }
   }
 
   return (
@@ -88,7 +106,19 @@ export default async function ModulePage({ params }: Props) {
 
       <Lesson content={mod.content} courseSlug={courseSlug} moduleSlug={moduleSlug} />
 
-      <div className="mt-10 flex items-center justify-between border-t border-border pt-6 text-sm">
+      <div className="mt-10 pt-6 border-t border-border">
+        <div className="mb-8">
+          <h2 className="text-lg font-semibold mb-3">Feedback</h2>
+          <LessonFeedback
+            courseSlug={courseSlug}
+            moduleSlug={moduleSlug}
+            initialRating={initialFeedbackRating}
+            initialComment={initialFeedbackComment}
+          />
+        </div>
+      </div>
+
+      <div className="mt-6 flex items-center justify-between border-t border-border pt-6 text-sm">
         {prev ? (
           <Link
             href={`/courses/${courseSlug}/${prev.slug}`}
