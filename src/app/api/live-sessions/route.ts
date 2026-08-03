@@ -6,13 +6,24 @@ import { canInstruct } from "@/lib/roles";
 
 // Poll target for the presentation deck — both the instructor (to resume
 // their own session or notice a conflicting one) and viewers (to cap
-// forward navigation) hit this.
+// forward navigation) hit this. Pass history=true to instead list past
+// (ended) sessions for the module, for the replay list.
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const courseSlug = url.searchParams.get("courseSlug");
   const moduleSlug = url.searchParams.get("moduleSlug");
   if (!courseSlug || !moduleSlug) {
     return NextResponse.json({ error: "courseSlug and moduleSlug are required" }, { status: 400 });
+  }
+
+  if (url.searchParams.get("history") === "true") {
+    const sessions = await db.liveSession.findMany({
+      where: { courseSlug, moduleSlug, isActive: false },
+      select: { id: true, startedAt: true, endedAt: true },
+      orderBy: { startedAt: "desc" },
+      take: 10,
+    });
+    return NextResponse.json({ sessions });
   }
 
   const session = await db.liveSession.findFirst({
