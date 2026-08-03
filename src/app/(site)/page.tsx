@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { Database, Presentation, GraduationCap } from "lucide-react";
-import { getCourses, getCourseModules } from "@/lib/content";
+import { getAllCourses, getAnyCourseModules } from "@/lib/content";
 
-export default function Home() {
-  const courses = getCourses();
+export default async function Home() {
+  const courses = await getAllCourses();
+  const moduleCounts = await Promise.all(
+    courses.map((course) => getAnyCourseModules(course.slug))
+  );
 
   return (
     <div className="flex-1">
@@ -56,8 +59,8 @@ export default function Home() {
         <section className="mx-auto max-w-4xl px-4 pb-24">
           <p className="eyebrow mb-3">Courses</p>
           <div className="grid gap-4 sm:grid-cols-2">
-            {courses.map((course) => {
-              const modules = getCourseModules(course.slug);
+            {courses.map((course, i) => {
+              const modules = moduleCounts[i];
               return (
                 <Link
                   key={course.slug}
