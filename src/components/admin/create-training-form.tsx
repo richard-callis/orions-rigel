@@ -2,9 +2,20 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Loader2 } from "lucide-react";
+import { Sparkles, PenLine, Loader2 } from "lucide-react";
 import { slugify } from "@/lib/slugify";
 import type { GeneratedDraft } from "@/lib/generate-training";
+
+const BLANK_DRAFT: GeneratedDraft = {
+  courseTitle: "",
+  courseDescription: "",
+  courseTagline: "",
+  moduleTitle: "",
+  moduleDescription: "",
+  level: "intermediate",
+  duration: "",
+  content: "",
+};
 
 type SandboxType = "sql" | "yaml";
 type Level = "setup" | "foundations" | "intermediate" | "mastery" | "reference";
@@ -50,6 +61,11 @@ export function CreateTrainingForm() {
     } finally {
       setGenerating(false);
     }
+  }
+
+  function handleWriteManually() {
+    setError(null);
+    setDraft({ ...BLANK_DRAFT, level, courseSlug: "", moduleSlug: "" });
   }
 
   function updateDraft<K extends keyof ReviewState>(key: K, value: ReviewState[K]) {
@@ -133,14 +149,25 @@ export function CreateTrainingForm() {
 
         {error && <p className="text-sm text-error">{error}</p>}
 
-        <button
-          type="submit"
-          disabled={generating}
-          className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
-        >
-          {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-          {generating ? "Generating…" : "Generate draft"}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={generating}
+            className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
+          >
+            {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+            {generating ? "Generating…" : "Generate draft"}
+          </button>
+          <span className="text-xs text-muted">or</span>
+          <button
+            type="button"
+            onClick={handleWriteManually}
+            className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-surface-raised transition-colors cursor-pointer"
+          >
+            <PenLine size={14} />
+            Write it myself
+          </button>
+        </div>
       </form>
     );
   }
