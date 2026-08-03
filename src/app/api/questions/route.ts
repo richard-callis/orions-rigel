@@ -19,10 +19,11 @@ export async function GET(request: Request) {
   const session = await auth();
   const userId = session?.user?.id;
 
+  // No orderBy here — the app-level sort below (answered, then upvotes, then
+  // age) fully determines final order, so a DB-level sort would be discarded.
   const questions = await db.liveQuestion.findMany({
     where: { courseSlug, moduleSlug },
     include: { upvotes: true },
-    orderBy: [{ answered: "asc" }, { createdAt: "asc" }],
   });
 
   const questionsWithCounts = questions.map((q) => ({

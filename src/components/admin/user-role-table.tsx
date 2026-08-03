@@ -19,6 +19,7 @@ export function UserRoleTable({ initialUsers }: { initialUsers: AdminUser[] }) {
   const myId = session?.user?.id;
   const [users, setUsers] = useState(initialUsers);
   const [pendingId, setPendingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [confirmText, setConfirmText] = useState("");
@@ -46,7 +47,7 @@ export function UserRoleTable({ initialUsers }: { initialUsers: AdminUser[] }) {
   }
 
   async function deleteUser(id: string) {
-    setPendingId(id);
+    setDeletingId(id);
     setError(null);
     try {
       const res = await fetch(`/api/admin/users/${id}`, {
@@ -63,7 +64,7 @@ export function UserRoleTable({ initialUsers }: { initialUsers: AdminUser[] }) {
       setConfirmingId(null);
       setConfirmText("");
     } finally {
-      setPendingId(null);
+      setDeletingId(null);
     }
   }
 
@@ -120,7 +121,7 @@ export function UserRoleTable({ initialUsers }: { initialUsers: AdminUser[] }) {
                     />
                     <button
                       onClick={() => deleteUser(u.id)}
-                      disabled={confirmText !== "DELETE" || pendingId === u.id}
+                      disabled={confirmText !== "DELETE" || deletingId === u.id}
                       className="rounded-lg bg-error px-2.5 py-1 text-xs font-medium text-white hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       Confirm

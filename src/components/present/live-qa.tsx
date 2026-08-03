@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { ChevronUp, Send, ThumbsUp } from "lucide-react";
+import { canInstruct } from "@/lib/roles";
 
 type Question = {
   id: string;
@@ -21,7 +22,7 @@ export function LiveQA({
   moduleSlug: string;
 }) {
   const { data: authSession } = useSession();
-  const isInstructor = authSession?.user?.role === "INSTRUCTOR";
+  const isInstructor = canInstruct(authSession?.user?.role);
 
   const [isOpen, setIsOpen] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
