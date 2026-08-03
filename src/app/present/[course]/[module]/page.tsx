@@ -35,6 +35,7 @@ export default async function PresentPage({ params }: Props) {
       proseClassName={slideProse}
       courseSlug={courseSlug}
       moduleSlug={moduleSlug}
+      trusted={mod.trusted}
     />
   ));
 

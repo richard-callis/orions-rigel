@@ -18,7 +18,7 @@ const schema = z.object({
   moduleDescription: z.string().trim().max(500).optional(),
   level: z.enum(["setup", "foundations", "intermediate", "mastery", "reference"]),
   duration: z.string().trim().max(50).optional(),
-  content: z.string().trim().min(1),
+  content: z.string().trim().min(1).max(50_000),
 });
 
 export async function POST(request: Request) {

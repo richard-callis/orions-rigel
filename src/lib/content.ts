@@ -30,6 +30,13 @@ export type ModuleMeta = {
 export type ModuleContent = {
   meta: ModuleMeta;
   content: string;
+  /**
+   * Whether `content` is safe to render with MDX JS expressions enabled.
+   * File-based content is authored and committed by us; generated content
+   * is instructor-authored and stored in the DB — never trust it the same
+   * way. See src/components/mdx/lesson.tsx.
+   */
+  trusted: boolean;
 };
 
 /** Filenames look like `01-foundations.mdx` — split the sort prefix from the URL slug. */
@@ -106,6 +113,7 @@ export function getModule(courseSlug: string, moduleSlug: string): ModuleContent
       duration: data.duration,
     },
     content,
+    trusted: true,
   };
 }
 
@@ -198,7 +206,9 @@ export async function getAnyModule(
   const generated = await db.generatedModule.findFirst({
     where: { slug: moduleSlug, course: { slug: courseSlug } },
   });
-  return generated ? { meta: generatedModuleToMeta(generated), content: generated.content } : null;
+  return generated
+    ? { meta: generatedModuleToMeta(generated), content: generated.content, trusted: false }
+    : null;
 }
 
 export async function getAnyModuleNeighbors(courseSlug: string, moduleSlug: string) {
