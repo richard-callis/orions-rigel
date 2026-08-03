@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { canInstruct } from "@/lib/roles";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -12,7 +13,7 @@ const updateSchema = z.object({
 // Instructor-only: mark a question as answered/unanswered.
 export async function PATCH(request: Request, { params }: Props) {
   const session = await auth();
-  if (session?.user?.role !== "INSTRUCTOR") {
+  if (!session?.user || !canInstruct(session.user.role)) {
     return NextResponse.json({ error: "Instructor only" }, { status: 403 });
   }
 

@@ -71,6 +71,17 @@ export async function DELETE(request: Request, { params }: Props) {
     return NextResponse.json({ error: "Type DELETE to confirm" }, { status: 400 });
   }
 
+  // This endpoint always hard-deletes with no anonymize option — the UI
+  // hides the delete button for your own row, but a direct API call would
+  // otherwise bypass that and skip the anonymize choice /api/account offers
+  // for self-deletion. Route it there instead.
+  if (id === session.user.id) {
+    return NextResponse.json(
+      { error: "Use account settings to delete your own account" },
+      { status: 400 },
+    );
+  }
+
   const result = await db.$transaction(async (tx) => {
     const target = await tx.user.findUnique({ where: { id }, select: { role: true } });
     if (!target) {
