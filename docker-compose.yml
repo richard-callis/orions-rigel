@@ -37,6 +37,9 @@ services:
       # Needed so Auth.js trusts the host/proto it's reached through when
       # sitting behind a reverse proxy or load balancer (see README).
       AUTH_TRUST_HOST: "true"
+      # Optional — only needed for /admin/create-training (AI-assisted
+      # training drafting). Leave unset to skip that feature.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
