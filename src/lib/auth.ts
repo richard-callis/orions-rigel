@@ -45,13 +45,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // Re-read the role from the DB on every session check rather than
         // trusting the JWT's cached value — an admin assigning a role
         // change to another user should take effect on that user's next
-        // request, not require them to sign out and back in. Falls back to
-        // the token's role if the user was deleted since the token issued.
+        // request, not require them to sign out and back in.
         const fresh = await db.user.findUnique({
           where: { id: token.id as string },
           select: { role: true },
         });
-        session.user.role = fresh?.role ?? (token.role as "STUDENT" | "INSTRUCTOR" | "ADMIN");
+        // Fail closed, not open: if the user row is gone (account deleted)
+        // since the token was issued, don't fall back to the JWT's cached
+        // role — that would let a deleted admin retain admin access for up
+        // to the token's full lifetime.
+        session.user.role = fresh?.role ?? "STUDENT";
       }
       return session;
     },
