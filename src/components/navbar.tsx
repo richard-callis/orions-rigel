@@ -29,7 +29,9 @@ export function Navbar() {
                   Admin
                 </Link>
               )}
-              <span className="text-muted hidden sm:inline">{session.user?.name}</span>
+              <Link href="/account" className="text-muted hidden sm:inline hover:text-accent transition-colors">
+                {session.user?.name}
+              </Link>
               <button
                 onClick={() => signOut({ callbackUrl: "/" })}
                 className="rounded-lg border border-border px-3 py-1.5 hover:bg-surface-raised transition-colors cursor-pointer"
