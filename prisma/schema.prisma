@@ -174,3 +174,45 @@ model LessonFeedback {
   @@unique([userId, courseSlug, moduleSlug])
   @@index([courseSlug, moduleSlug])
 }
+
+// AI-drafted courses (see /admin/create-training), stored in the DB rather
+// than as files in src/content/ — this coexists with the file-based
+// courses rather than replacing them. getCoursesAsync()/getCourseAsync()/
+// etc. in src/lib/content.ts merge both sources for every page that lists
+// or renders a course; hand-authored file-based courses are untouched.
+// createdById is a plain string (no relation) — matches LiveSession/
+// ActiveQuiz's pattern, so deleting the creating user's account never
+// cascades away course content.
+model GeneratedCourse {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  description String
+  tagline     String?
+  sandboxType String   @default("sql")
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  modules GeneratedModule[]
+}
+
+model GeneratedModule {
+  id          String   @id @default(cuid())
+  courseId    String
+  slug        String
+  order       Int
+  title       String
+  description String
+  level       String
+  duration    String?
+  content     String
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course GeneratedCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, slug])
+  @@unique([courseId, order])
+}
