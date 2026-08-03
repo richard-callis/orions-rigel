@@ -6,23 +6,27 @@ import { Sparkles, PenLine, Loader2 } from "lucide-react";
 import { slugify } from "@/lib/slugify";
 import type { GeneratedDraft } from "@/lib/generate-training";
 
-const BLANK_DRAFT: GeneratedDraft = {
-  courseTitle: "",
-  courseDescription: "",
-  courseTagline: "",
-  moduleTitle: "",
-  moduleDescription: "",
-  level: "intermediate",
-  duration: "",
-  content: "",
-};
-
 type SandboxType = "sql" | "yaml";
 type Level = "setup" | "foundations" | "intermediate" | "mastery" | "reference";
 
 const LEVELS: Level[] = ["setup", "foundations", "intermediate", "mastery", "reference"];
 
 type ReviewState = GeneratedDraft & { courseSlug: string; moduleSlug: string };
+
+// level here is a placeholder — handleWriteManually always overrides it with
+// whatever the level select was set to on the topic form, same as the AI path.
+const BLANK_DRAFT: ReviewState = {
+  courseTitle: "",
+  courseDescription: "",
+  courseTagline: "",
+  courseSlug: "",
+  moduleTitle: "",
+  moduleDescription: "",
+  moduleSlug: "",
+  level: "intermediate",
+  duration: "",
+  content: "",
+};
 
 export function CreateTrainingForm() {
   const router = useRouter();
@@ -65,11 +69,27 @@ export function CreateTrainingForm() {
 
   function handleWriteManually() {
     setError(null);
-    setDraft({ ...BLANK_DRAFT, level, courseSlug: "", moduleSlug: "" });
+    setDraft({ ...BLANK_DRAFT, level });
   }
 
   function updateDraft<K extends keyof ReviewState>(key: K, value: ReviewState[K]) {
     setDraft((d) => (d ? { ...d, [key]: value } : d));
+  }
+
+  // Keep the slug in sync with the title until the slug is edited by hand —
+  // otherwise a manually-written draft has two required-but-unmarked slug
+  // fields that silently 400 on publish if left blank.
+  function updateTitleAndSlug(
+    titleKey: "courseTitle" | "moduleTitle",
+    slugKey: "courseSlug" | "moduleSlug",
+    value: string,
+  ) {
+    setDraft((d) => {
+      if (!d) return d;
+      const next = { ...d, [titleKey]: value };
+      if (!d[slugKey]) next[slugKey] = slugify(value);
+      return next;
+    });
   }
 
   async function handlePublish() {
@@ -176,7 +196,11 @@ export function CreateTrainingForm() {
     <div className="space-y-6 max-w-3xl">
       <div className="rounded-xl border border-border bg-surface p-5 space-y-4">
         <p className="eyebrow">New course</p>
-        <Field label="Title" value={draft.courseTitle} onChange={(v) => updateDraft("courseTitle", v)} />
+        <Field
+          label="Title"
+          value={draft.courseTitle}
+          onChange={(v) => updateTitleAndSlug("courseTitle", "courseSlug", v)}
+        />
         <Field
           label="URL slug"
           value={draft.courseSlug}
@@ -198,7 +222,11 @@ export function CreateTrainingForm() {
 
       <div className="rounded-xl border border-border bg-surface p-5 space-y-4">
         <p className="eyebrow">Module</p>
-        <Field label="Title" value={draft.moduleTitle} onChange={(v) => updateDraft("moduleTitle", v)} />
+        <Field
+          label="Title"
+          value={draft.moduleTitle}
+          onChange={(v) => updateTitleAndSlug("moduleTitle", "moduleSlug", v)}
+        />
         <Field
           label="URL slug"
           value={draft.moduleSlug}

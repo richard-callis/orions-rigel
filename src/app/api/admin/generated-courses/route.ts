@@ -29,8 +29,11 @@ export async function POST(request: Request) {
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const field = issue?.path.join(".");
+    const message = issue ? (field ? `${field}: ${issue.message}` : issue.message) : "Invalid input";
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid input" },
+      { error: message },
       { status: 400 }
     );
   }
