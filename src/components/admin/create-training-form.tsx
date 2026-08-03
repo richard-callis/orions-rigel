@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Loader2 } from "lucide-react";
+import { Sparkles, PenLine, Loader2 } from "lucide-react";
 import { slugify } from "@/lib/slugify";
 import type { GeneratedDraft } from "@/lib/generate-training";
 
@@ -12,6 +12,21 @@ type Level = "setup" | "foundations" | "intermediate" | "mastery" | "reference";
 const LEVELS: Level[] = ["setup", "foundations", "intermediate", "mastery", "reference"];
 
 type ReviewState = GeneratedDraft & { courseSlug: string; moduleSlug: string };
+
+// level here is a placeholder — handleWriteManually always overrides it with
+// whatever the level select was set to on the topic form, same as the AI path.
+const BLANK_DRAFT: ReviewState = {
+  courseTitle: "",
+  courseDescription: "",
+  courseTagline: "",
+  courseSlug: "",
+  moduleTitle: "",
+  moduleDescription: "",
+  moduleSlug: "",
+  level: "intermediate",
+  duration: "",
+  content: "",
+};
 
 export function CreateTrainingForm() {
   const router = useRouter();
@@ -23,6 +38,10 @@ export function CreateTrainingForm() {
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<ReviewState | null>(null);
+  // Whether the slug has been edited directly, as opposed to only ever
+  // having been derived from the title — see updateTitleAndSlug.
+  const [courseSlugTouched, setCourseSlugTouched] = useState(false);
+  const [moduleSlugTouched, setModuleSlugTouched] = useState(false);
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
@@ -40,6 +59,8 @@ export function CreateTrainingForm() {
         return;
       }
       const d: GeneratedDraft = body.draft;
+      setCourseSlugTouched(false);
+      setModuleSlugTouched(false);
       setDraft({
         ...d,
         courseSlug: slugify(d.courseTitle),
@@ -52,8 +73,33 @@ export function CreateTrainingForm() {
     }
   }
 
+  function handleWriteManually() {
+    setError(null);
+    setCourseSlugTouched(false);
+    setModuleSlugTouched(false);
+    setDraft({ ...BLANK_DRAFT, level });
+  }
+
   function updateDraft<K extends keyof ReviewState>(key: K, value: ReviewState[K]) {
     setDraft((d) => (d ? { ...d, [key]: value } : d));
+  }
+
+  // Keep the slug in sync with the title until the slug is edited directly
+  // (see the slug Field's own onChange, which flips *Touched) — otherwise a
+  // manually-written draft has two required-but-unmarked slug fields that
+  // silently 400 on publish if left blank.
+  function updateTitleAndSlug(
+    titleKey: "courseTitle" | "moduleTitle",
+    slugKey: "courseSlug" | "moduleSlug",
+    touched: boolean,
+    value: string,
+  ) {
+    setDraft((d) => {
+      if (!d) return d;
+      const next = { ...d, [titleKey]: value };
+      if (!touched) next[slugKey] = slugify(value);
+      return next;
+    });
   }
 
   async function handlePublish() {
@@ -133,14 +179,25 @@ export function CreateTrainingForm() {
 
         {error && <p className="text-sm text-error">{error}</p>}
 
-        <button
-          type="submit"
-          disabled={generating}
-          className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
-        >
-          {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-          {generating ? "Generating…" : "Generate draft"}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={generating}
+            className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
+          >
+            {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+            {generating ? "Generating…" : "Generate draft"}
+          </button>
+          <span className="text-xs text-muted">or</span>
+          <button
+            type="button"
+            onClick={handleWriteManually}
+            className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-surface-raised transition-colors cursor-pointer"
+          >
+            <PenLine size={14} />
+            Write it myself
+          </button>
+        </div>
       </form>
     );
   }
@@ -149,11 +206,18 @@ export function CreateTrainingForm() {
     <div className="space-y-6 max-w-3xl">
       <div className="rounded-xl border border-border bg-surface p-5 space-y-4">
         <p className="eyebrow">New course</p>
-        <Field label="Title" value={draft.courseTitle} onChange={(v) => updateDraft("courseTitle", v)} />
+        <Field
+          label="Title"
+          value={draft.courseTitle}
+          onChange={(v) => updateTitleAndSlug("courseTitle", "courseSlug", courseSlugTouched, v)}
+        />
         <Field
           label="URL slug"
           value={draft.courseSlug}
-          onChange={(v) => updateDraft("courseSlug", slugify(v))}
+          onChange={(v) => {
+            setCourseSlugTouched(true);
+            updateDraft("courseSlug", slugify(v));
+          }}
           mono
         />
         <Field
@@ -171,11 +235,18 @@ export function CreateTrainingForm() {
 
       <div className="rounded-xl border border-border bg-surface p-5 space-y-4">
         <p className="eyebrow">Module</p>
-        <Field label="Title" value={draft.moduleTitle} onChange={(v) => updateDraft("moduleTitle", v)} />
+        <Field
+          label="Title"
+          value={draft.moduleTitle}
+          onChange={(v) => updateTitleAndSlug("moduleTitle", "moduleSlug", moduleSlugTouched, v)}
+        />
         <Field
           label="URL slug"
           value={draft.moduleSlug}
-          onChange={(v) => updateDraft("moduleSlug", slugify(v))}
+          onChange={(v) => {
+            setModuleSlugTouched(true);
+            updateDraft("moduleSlug", slugify(v));
+          }}
           mono
         />
         <Field

@@ -14,8 +14,8 @@ export default async function CreateTrainingPage() {
     <div className="w-full mx-auto max-w-3xl px-4 py-12">
       <h1 className="text-3xl font-semibold tracking-tight mb-1">Create a training</h1>
       <p className="text-foreground-secondary mb-8">
-        Describe a topic, review what Claude drafts, edit anything you want, then publish.
-        Nothing goes live until you publish it.
+        Have Claude draft a starting point from a topic, or write it yourself from scratch —
+        either way you land in the same editor and nothing goes live until you publish it.
       </p>
 
       <CreateTrainingForm />
