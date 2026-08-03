@@ -26,9 +26,10 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  progress      LessonProgress[]
-  savedQueries  SavedQuery[]
-  quizResponses QuizResponse[]
+  progress         LessonProgress[]
+  reviewSchedules  ReviewSchedule[]
+  savedQueries     SavedQuery[]
+  quizResponses    QuizResponse[]
 }
 
 // One row per (user, lesson) once the user marks it complete.
@@ -106,4 +107,26 @@ model QuizResponse {
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([activeQuizId, userId])
+}
+
+// Spaced-repetition review schedule for modules.
+// When a module is marked complete, a ReviewSchedule row is created/updated
+// with an initial review interval. Students can review on a simple SM-2-lite
+// algorithm: easy reviews push the interval further, hard reviews reset it shorter.
+model ReviewSchedule {
+  id             String   @id @default(cuid())
+  userId         String
+  courseSlug     String
+  moduleSlug     String
+  dueAt          DateTime
+  intervalDays   Int      @default(1)
+  reviewCount    Int      @default(0)
+  lastReviewedAt DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseSlug, moduleSlug])
+  @@index([userId, dueAt])
 }

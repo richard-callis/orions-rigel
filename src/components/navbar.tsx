@@ -24,6 +24,9 @@ export function Navbar() {
               <Link href="/dashboard" className="hover:text-accent transition-colors">
                 Dashboard
               </Link>
+              <Link href="/review" className="hover:text-accent transition-colors">
+                Review
+              </Link>
               <span className="text-muted hidden sm:inline">{session.user?.name}</span>
               <button
                 onClick={() => signOut({ callbackUrl: "/" })}

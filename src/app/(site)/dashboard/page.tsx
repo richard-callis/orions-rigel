@@ -23,6 +23,15 @@ export default async function DashboardPage() {
     completedByCourse.get(p.courseSlug)!.add(p.moduleSlug);
   }
 
+  // Count pending reviews
+  const now = new Date();
+  const pendingReviewCount = await db.reviewSchedule.count({
+    where: {
+      userId: session.user.id,
+      dueAt: { lte: now },
+    },
+  });
+
   return (
     <div className="w-full mx-auto max-w-3xl px-4 py-12">
       <div className="mb-10 flex items-start justify-between gap-4">
@@ -31,6 +40,13 @@ export default async function DashboardPage() {
             Welcome back, {session.user.name?.split(" ")[0]}
           </h1>
           <p className="text-foreground-secondary">Here&apos;s where you left off.</p>
+          {pendingReviewCount > 0 && (
+            <p className="text-sm text-accent font-medium mt-2">
+              <a href="/review" className="hover:underline">
+                {pendingReviewCount} module{pendingReviewCount === 1 ? "" : "s"} due for review
+              </a>
+            </p>
+          )}
         </div>
         <RoleToggle />
       </div>
