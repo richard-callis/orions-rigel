@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useSession } from "next-auth/react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Trash2 } from "lucide-react";
 
 export type AdminUser = {
   id: string;
@@ -20,6 +20,8 @@ export function UserRoleTable({ initialUsers }: { initialUsers: AdminUser[] }) {
   const [users, setUsers] = useState(initialUsers);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [confirmText, setConfirmText] = useState("");
 
   async function changeRole(id: string, role: AdminUser["role"]) {
     setPendingId(id);
@@ -43,6 +45,28 @@ export function UserRoleTable({ initialUsers }: { initialUsers: AdminUser[] }) {
     }
   }
 
+  async function deleteUser(id: string) {
+    setPendingId(id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/users/${id}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: confirmText }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error ?? "Couldn't delete that user.");
+        return;
+      }
+      setUsers((us) => us.filter((u) => u.id !== id));
+      setConfirmingId(null);
+      setConfirmText("");
+    } finally {
+      setPendingId(null);
+    }
+  }
+
   return (
     <div className="rounded-xl border border-border bg-surface overflow-hidden">
       {error && (
@@ -54,6 +78,7 @@ export function UserRoleTable({ initialUsers }: { initialUsers: AdminUser[] }) {
             <th className="px-4 py-2 text-left font-medium">Name</th>
             <th className="px-4 py-2 text-left font-medium">Email</th>
             <th className="px-4 py-2 text-left font-medium">Role</th>
+            <th className="px-4 py-2 text-left font-medium sr-only">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -80,6 +105,49 @@ export function UserRoleTable({ initialUsers }: { initialUsers: AdminUser[] }) {
                   </select>
                   {pendingId === u.id && <Loader2 size={14} className="animate-spin text-muted" />}
                 </div>
+              </td>
+              <td className="px-4 py-2.5 text-right">
+                {u.id === myId ? null : confirmingId === u.id ? (
+                  <div className="flex items-center justify-end gap-1.5">
+                    <input
+                      type="text"
+                      value={confirmText}
+                      onChange={(e) => setConfirmText(e.target.value)}
+                      placeholder="DELETE"
+                      autoComplete="off"
+                      autoFocus
+                      className="w-24 rounded-lg border border-error/40 bg-surface px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-error"
+                    />
+                    <button
+                      onClick={() => deleteUser(u.id)}
+                      disabled={confirmText !== "DELETE" || pendingId === u.id}
+                      className="rounded-lg bg-error px-2.5 py-1 text-xs font-medium text-white hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      onClick={() => {
+                        setConfirmingId(null);
+                        setConfirmText("");
+                      }}
+                      className="rounded-lg border border-border px-2.5 py-1 text-xs hover:bg-surface-raised transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      setConfirmingId(u.id);
+                      setConfirmText("");
+                      setError(null);
+                    }}
+                    title="Delete user and all their data"
+                    className="rounded-lg p-1.5 text-muted hover:bg-error/10 hover:text-error transition-colors cursor-pointer"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
               </td>
             </tr>
           ))}
