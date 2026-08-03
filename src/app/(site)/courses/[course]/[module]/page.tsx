@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ArrowRight, Presentation } from "lucide-react";
+import { ArrowLeft, ArrowRight, History, Presentation } from "lucide-react";
 import { getCourse, getModule, getModuleNeighbors } from "@/lib/content";
 import { Lesson } from "@/components/mdx/lesson";
 import { LearnLayout } from "@/components/playground/learn-layout";
@@ -34,6 +34,13 @@ export default async function ModulePage({ params }: Props) {
   if (!course || !mod) notFound();
 
   const { prev, next } = getModuleNeighbors(courseSlug, moduleSlug);
+
+  const pastSessions = await db.liveSession.findMany({
+    where: { courseSlug, moduleSlug, isActive: false },
+    select: { id: true, startedAt: true },
+    orderBy: { startedAt: "desc" },
+    take: 5,
+  });
 
   const session = await auth();
   let initiallyCompleted = false;
@@ -84,6 +91,22 @@ export default async function ModulePage({ params }: Props) {
             initiallyCompleted={initiallyCompleted}
           />
         </div>
+        {pastSessions.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+            <span className="flex items-center gap-1 text-muted">
+              <History size={12} /> Past sessions:
+            </span>
+            {pastSessions.map((s) => (
+              <Link
+                key={s.id}
+                href={`/present/replay/${s.id}`}
+                className="rounded border border-border px-2 py-0.5 font-mono text-foreground-secondary hover:bg-surface-raised hover:text-foreground transition-colors"
+              >
+                {s.startedAt.toLocaleDateString()}
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       <Lesson content={mod.content} courseSlug={courseSlug} moduleSlug={moduleSlug} />

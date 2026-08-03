@@ -27,6 +27,11 @@ export function Navbar() {
               <Link href="/review" className="hover:text-accent transition-colors">
                 Review
               </Link>
+              {session.user?.role === "ADMIN" && (
+                <Link href="/admin/users" className="hover:text-accent transition-colors">
+                  Admin
+                </Link>
+              )}
               <span className="text-muted hidden sm:inline">{session.user?.name}</span>
               <button
                 onClick={() => signOut({ callbackUrl: "/" })}

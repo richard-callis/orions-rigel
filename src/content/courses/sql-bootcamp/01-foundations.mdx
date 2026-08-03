@@ -170,3 +170,17 @@ quick, real example of why join fan-out matters.
 
 If most of the room can read this comfortably (even if they couldn't
 write it cold), you're ready for Module 2.
+
+---
+
+## Try it yourself: JOIN recap
+
+Now it's your turn. Write a query that retrieves all orders from 2024 along
+with the customer's name. Order the results by order date, newest first.
+
+<Exercise
+  id="join-recap"
+  type="sql"
+  prompt="Write a query to select all orders from 2024 with the customer name, ordered by order date (newest first)."
+  sql="SELECT o.order_id, c.first_name, c.last_name, o.order_date FROM orders o JOIN customers c ON o.customer_id = c.customer_id WHERE EXTRACT(YEAR FROM o.order_date) = 2024 ORDER BY o.order_date DESC;"
+/>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { CheckCircle2, XCircle, Radio, Users } from "lucide-react";
 import { useLessonMeta } from "@/lib/lesson-meta-context";
+import { canInstruct } from "@/lib/roles";
 
 type StatusResponse = {
   active: { id: string; activatedAt: string; closedAt: string | null } | null;
@@ -25,7 +26,7 @@ export function Quiz({
 }) {
   const { courseSlug, moduleSlug } = useLessonMeta();
   const { data: authSession, status: authStatus } = useSession();
-  const isInstructor = authSession?.user?.role === "INSTRUCTOR";
+  const isInstructor = canInstruct(authSession?.user?.role);
 
   const [state, setState] = useState<StatusResponse | null>(null);
   const [pending, setPending] = useState(false);

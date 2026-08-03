@@ -15,6 +15,7 @@ datasource db {
 enum Role {
   STUDENT
   INSTRUCTOR
+  ADMIN
 }
 
 model User {
@@ -30,6 +31,7 @@ model User {
   reviewSchedules  ReviewSchedule[]
   savedQueries     SavedQuery[]
   quizResponses    QuizResponse[]
+  exerciseAttempts ExerciseAttempt[]
 }
 
 // One row per (user, lesson) once the user marks it complete.
@@ -66,15 +68,18 @@ model SavedQuery {
 // see SlideDeck. Only one row should be isActive per (courseSlug,
 // moduleSlug) at a time; starting a new session should close any prior one.
 model LiveSession {
-  id           String    @id @default(cuid())
-  courseSlug   String
-  moduleSlug   String
-  instructorId String
-  currentSlide Int       @default(0)
-  isActive     Boolean   @default(true)
-  startedAt    DateTime  @default(now())
-  endedAt      DateTime?
-  updatedAt    DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  courseSlug    String
+  moduleSlug    String
+  instructorId  String
+  currentSlide  Int       @default(0)
+  isActive      Boolean   @default(true)
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
+  updatedAt     DateTime  @updatedAt
+  // Timeline of slide changes for replay: [{ slideIndex, atMs }], atMs
+  // relative to startedAt. Appended to on each currentSlide update.
+  sessionEvents Json      @default("[]")
 
   @@index([courseSlug, moduleSlug, isActive])
 }
@@ -107,6 +112,22 @@ model QuizResponse {
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([activeQuizId, userId])
+}
+
+// A record of a student's attempt to solve an exercise (SQL or YAML).
+// The exercise definition (prompt, reference query, checks) lives in the
+// MDX content itself; this only tracks whether they passed.
+model ExerciseAttempt {
+  id          String   @id @default(cuid())
+  userId      String
+  exerciseKey String   // synthetic key: ${courseSlug}:${moduleSlug}:${exerciseId}
+  passed      Boolean
+  attemptedAt DateTime @default(now()) @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, exerciseKey])
+  @@index([userId])
 }
 
 // Spaced-repetition review schedule for modules.
