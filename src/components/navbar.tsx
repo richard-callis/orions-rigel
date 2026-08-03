@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
+import { canInstruct } from "@/lib/roles";
 
 export function Navbar() {
   const { data: session, status } = useSession();
@@ -24,6 +25,11 @@ export function Navbar() {
               <Link href="/dashboard" className="hover:text-accent transition-colors">
                 Dashboard
               </Link>
+              {canInstruct(session.user?.role) && (
+                <Link href="/admin/create-training" className="hover:text-accent transition-colors">
+                  Create training
+                </Link>
+              )}
               {session.user?.role === "ADMIN" && (
                 <Link href="/admin/users" className="hover:text-accent transition-colors">
                   Admin
