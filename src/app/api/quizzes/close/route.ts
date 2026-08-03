@@ -3,12 +3,13 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { tallyOf } from "@/lib/quiz-tally";
+import { canInstruct } from "@/lib/roles";
 
 const schema = z.object({ activeQuizId: z.string().min(1) });
 
 export async function POST(request: Request) {
   const session = await auth();
-  if (session?.user?.role !== "INSTRUCTOR") {
+  if (!canInstruct(session?.user?.role)) {
     return NextResponse.json({ error: "Instructor only" }, { status: 403 });
   }
 
