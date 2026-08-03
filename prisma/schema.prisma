@@ -65,15 +65,18 @@ model SavedQuery {
 // see SlideDeck. Only one row should be isActive per (courseSlug,
 // moduleSlug) at a time; starting a new session should close any prior one.
 model LiveSession {
-  id           String    @id @default(cuid())
-  courseSlug   String
-  moduleSlug   String
-  instructorId String
-  currentSlide Int       @default(0)
-  isActive     Boolean   @default(true)
-  startedAt    DateTime  @default(now())
-  endedAt      DateTime?
-  updatedAt    DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  courseSlug    String
+  moduleSlug    String
+  instructorId  String
+  currentSlide  Int       @default(0)
+  isActive      Boolean   @default(true)
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
+  updatedAt     DateTime  @updatedAt
+  // Timeline of slide changes for replay: [{ slideIndex, atMs }], atMs
+  // relative to startedAt. Appended to on each currentSlide update.
+  sessionEvents Json      @default("[]")
 
   @@index([courseSlug, moduleSlug, isActive])
 }
