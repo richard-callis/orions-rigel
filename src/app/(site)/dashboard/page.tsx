@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Flame, Calendar, TrendingUp } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getCourses, getCourseModules } from "@/lib/content";
+import { getAllCourses, getAnyCourseModules } from "@/lib/content";
 import { getStreaks } from "@/lib/streaks";
 
 export const metadata = { title: "Dashboard · Technical Training" };
@@ -12,7 +12,8 @@ export default async function DashboardPage() {
   // proxy.ts already gates this route, but keep the page safe if hit directly in dev.
   if (!session?.user) return null;
 
-  const courses = getCourses();
+  const courses = await getAllCourses();
+  const moduleLists = await Promise.all(courses.map((c) => getAnyCourseModules(c.slug)));
   const progress = await db.lessonProgress.findMany({
     where: { userId: session.user.id },
     select: { courseSlug: true, moduleSlug: true, completedAt: true },
@@ -26,6 +27,15 @@ export default async function DashboardPage() {
     completedDates.push(p.completedAt);
   }
 
+  // Count pending reviews
+  const now = new Date();
+  const pendingReviewCount = await db.reviewSchedule.count({
+    where: {
+      userId: session.user.id,
+      dueAt: { lte: now },
+    },
+  });
+
   const { currentStreak, totalActiveDays, thisWeekCompletions } = getStreaks(completedDates);
 
   return (
@@ -35,6 +45,13 @@ export default async function DashboardPage() {
           Welcome back, {session.user.name?.split(" ")[0]}
         </h1>
         <p className="text-foreground-secondary">Here&apos;s where you left off.</p>
+        {pendingReviewCount > 0 && (
+          <p className="text-sm text-accent font-medium mt-2">
+            <a href="/review" className="hover:underline">
+              {pendingReviewCount} module{pendingReviewCount === 1 ? "" : "s"} due for review
+            </a>
+          </p>
+        )}
       </div>
 
       {/* Engagement stats */}
@@ -72,8 +89,8 @@ export default async function DashboardPage() {
       </div>
 
       <div className="space-y-4">
-        {courses.map((course) => {
-          const modules = getCourseModules(course.slug);
+        {courses.map((course, i) => {
+          const modules = moduleLists[i];
           const completed = completedByCourse.get(course.slug) ?? new Set();
           const nextModule = modules.find((m) => !completed.has(m.slug)) ?? modules[0];
           const pct = modules.length > 0 ? Math.round((completed.size / modules.length) * 100) : 0;

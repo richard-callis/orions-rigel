@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getCourse, getModule } from "@/lib/content";
+import { getAnyCourse, getAnyModule } from "@/lib/content";
 import { splitIntoSlides } from "@/lib/slides";
 import { Lesson } from "@/components/mdx/lesson";
 import { SlideDeck } from "@/components/present/slide-deck";
@@ -12,15 +12,15 @@ type Props = {
 
 export async function generateMetadata({ params }: Props) {
   const { course: courseSlug, module: moduleSlug } = await params;
-  const mod = getModule(courseSlug, moduleSlug);
+  const mod = await getAnyModule(courseSlug, moduleSlug);
   return { title: mod ? `Present · ${mod.meta.title}` : "Not found" };
 }
 
 export default async function PresentPage({ params }: Props) {
   const { course: courseSlug, module: moduleSlug } = await params;
 
-  const course = getCourse(courseSlug);
-  const mod = getModule(courseSlug, moduleSlug);
+  const course = await getAnyCourse(courseSlug);
+  const mod = await getAnyModule(courseSlug, moduleSlug);
   if (!course || !mod) notFound();
 
   const session = await auth();
@@ -35,6 +35,7 @@ export default async function PresentPage({ params }: Props) {
       proseClassName={slideProse}
       courseSlug={courseSlug}
       moduleSlug={moduleSlug}
+      trusted={mod.trusted}
     />
   ));
 

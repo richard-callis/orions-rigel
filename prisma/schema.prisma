@@ -28,9 +28,11 @@ model User {
   updatedAt    DateTime @updatedAt
 
   progress         LessonProgress[]
+  reviewSchedules  ReviewSchedule[]
   savedQueries     SavedQuery[]
   quizResponses    QuizResponse[]
   exerciseAttempts ExerciseAttempt[]
+  lessonFeedback   LessonFeedback[]
 }
 
 // One row per (user, lesson) once the user marks it complete.
@@ -155,4 +157,85 @@ model LiveQuestionUpvote {
   question LiveQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@unique([questionId, userId])
+}
+
+// Spaced-repetition review schedule for modules.
+// When a module is marked complete, a ReviewSchedule row is created/updated
+// with an initial review interval. Students can review on a simple SM-2-lite
+// algorithm: easy reviews push the interval further, hard reviews reset it shorter.
+model ReviewSchedule {
+  id             String   @id @default(cuid())
+  userId         String
+  courseSlug     String
+  moduleSlug     String
+  dueAt          DateTime
+  intervalDays   Int      @default(1)
+  reviewCount    Int      @default(0)
+  lastReviewedAt DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseSlug, moduleSlug])
+  @@index([userId, dueAt])
+}
+
+// Student feedback on a lesson (1-5 star rating + optional comment).
+model LessonFeedback {
+  id          String   @id @default(cuid())
+  userId      String
+  courseSlug  String
+  moduleSlug  String
+  rating      Int      // 1-5
+  comment     String?  // Optional feedback text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseSlug, moduleSlug])
+  @@index([courseSlug, moduleSlug])
+}
+
+// AI-drafted courses (see /admin/create-training), stored in the DB rather
+// than as files in src/content/ — this coexists with the file-based
+// courses rather than replacing them. getCoursesAsync()/getCourseAsync()/
+// etc. in src/lib/content.ts merge both sources for every page that lists
+// or renders a course; hand-authored file-based courses are untouched.
+// createdById is a plain string (no relation) — matches LiveSession/
+// ActiveQuiz's pattern, so deleting the creating user's account never
+// cascades away course content.
+model GeneratedCourse {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  description String
+  tagline     String?
+  sandboxType String   @default("sql")
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  modules GeneratedModule[]
+}
+
+model GeneratedModule {
+  id          String   @id @default(cuid())
+  courseId    String
+  slug        String
+  order       Int
+  title       String
+  description String
+  level       String
+  duration    String?
+  content     String
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course GeneratedCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, slug])
+  @@unique([courseId, order])
 }
