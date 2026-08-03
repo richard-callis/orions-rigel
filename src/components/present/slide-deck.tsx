@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { ChevronLeft, ChevronRight, X, Radio, ArrowDownToLine } from "lucide-react";
+import { LiveQA } from "./live-qa";
 
 type LiveSessionState = {
   id: string;
@@ -219,6 +220,8 @@ export function SlideDeck({
       <div className="flex-1 overflow-y-auto px-10 py-6 md:px-20">
         <div className="mx-auto max-w-4xl">{slides[index]}</div>
       </div>
+
+      <LiveQA courseSlug={courseSlug} moduleSlug={moduleSlug} />
 
       <div className="relative flex items-center justify-center gap-6 px-6 pb-6">
         <span className="eyebrow absolute left-6 hidden sm:inline">{courseTitle}</span>

@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { Flame, Calendar, TrendingUp } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { getAllCourses, getAnyCourseModules } from "@/lib/content";
+import { getStreaks } from "@/lib/streaks";
 
 export const metadata = { title: "Dashboard · Technical Training" };
 
@@ -14,14 +16,18 @@ export default async function DashboardPage() {
   const moduleLists = await Promise.all(courses.map((c) => getAnyCourseModules(c.slug)));
   const progress = await db.lessonProgress.findMany({
     where: { userId: session.user.id },
-    select: { courseSlug: true, moduleSlug: true },
+    select: { courseSlug: true, moduleSlug: true, completedAt: true },
   });
 
   const completedByCourse = new Map<string, Set<string>>();
+  const completedDates: Date[] = [];
   for (const p of progress) {
     if (!completedByCourse.has(p.courseSlug)) completedByCourse.set(p.courseSlug, new Set());
     completedByCourse.get(p.courseSlug)!.add(p.moduleSlug);
+    completedDates.push(p.completedAt);
   }
+
+  const { currentStreak, totalActiveDays, thisWeekCompletions } = getStreaks(completedDates);
 
   return (
     <div className="w-full mx-auto max-w-3xl px-4 py-12">
@@ -30,6 +36,40 @@ export default async function DashboardPage() {
           Welcome back, {session.user.name?.split(" ")[0]}
         </h1>
         <p className="text-foreground-secondary">Here&apos;s where you left off.</p>
+      </div>
+
+      {/* Engagement stats */}
+      <div className="grid grid-cols-3 gap-4 mb-10">
+        <div className="rounded-lg border border-border bg-surface p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Flame size={18} className="text-accent shrink-0" />
+            <span className="eyebrow">Streak</span>
+          </div>
+          <div className="text-3xl font-semibold text-foreground mb-1">{currentStreak}</div>
+          <p className="text-xs text-foreground-secondary">
+            {currentStreak === 1 ? "day" : "days"}
+          </p>
+        </div>
+
+        <div className="rounded-lg border border-border bg-surface p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Calendar size={18} className="text-accent shrink-0" />
+            <span className="eyebrow">Active Days</span>
+          </div>
+          <div className="text-3xl font-semibold text-foreground mb-1">{totalActiveDays}</div>
+          <p className="text-xs text-foreground-secondary">all-time</p>
+        </div>
+
+        <div className="rounded-lg border border-border bg-surface p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp size={18} className="text-accent shrink-0" />
+            <span className="eyebrow">This Week</span>
+          </div>
+          <div className="text-3xl font-semibold text-foreground mb-1">{thisWeekCompletions}</div>
+          <p className="text-xs text-foreground-secondary">
+            {thisWeekCompletions === 1 ? "completion" : "completions"}
+          </p>
+        </div>
       </div>
 
       <div className="space-y-4">

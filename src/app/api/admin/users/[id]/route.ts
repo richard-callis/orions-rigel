@@ -54,3 +54,51 @@ export async function PATCH(request: Request, { params }: Props) {
   }
   return NextResponse.json({ user: result.user });
 }
+
+const deleteSchema = z.object({
+  confirm: z.literal("DELETE"),
+});
+
+export async function DELETE(request: Request, { params }: Props) {
+  const session = await auth();
+  if (session?.user?.role !== "ADMIN") {
+    return NextResponse.json({ error: "Admin only" }, { status: 403 });
+  }
+
+  const { id } = await params;
+  const parsed = deleteSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Type DELETE to confirm" }, { status: 400 });
+  }
+
+  const result = await db.$transaction(async (tx) => {
+    const target = await tx.user.findUnique({ where: { id }, select: { role: true } });
+    if (!target) {
+      return { error: "Not found", status: 404 } as const;
+    }
+
+    // Same last-admin guard as the role-change path above — deleting the
+    // last admin would leave the platform with no one able to assign
+    // roles or delete anyone else.
+    if (target.role === "ADMIN") {
+      await lockAdminCount(tx);
+      const adminCount = await tx.user.count({ where: { role: "ADMIN" } });
+      if (adminCount <= 1) {
+        return { error: "Can't remove the last admin", status: 400 } as const;
+      }
+    }
+
+    // Hard delete — cascades to progress, saved queries, quiz responses,
+    // and exercise attempts via the schema's onDelete: Cascade relations.
+    // Unlike self-service deletion (/api/account), there's no anonymize
+    // option here: an admin removing another member's account removes
+    // the member and all their data, full stop.
+    await tx.user.delete({ where: { id } });
+    return { ok: true } as const;
+  });
+
+  if ("error" in result) {
+    return NextResponse.json({ error: result.error }, { status: result.status });
+  }
+  return NextResponse.json({ ok: true });
+}
