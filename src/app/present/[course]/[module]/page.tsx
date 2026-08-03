@@ -4,6 +4,7 @@ import { splitIntoSlides } from "@/lib/slides";
 import { Lesson } from "@/components/mdx/lesson";
 import { SlideDeck } from "@/components/present/slide-deck";
 import { auth } from "@/lib/auth";
+import { canInstruct } from "@/lib/roles";
 
 type Props = {
   params: Promise<{ course: string; module: string }>;
@@ -23,7 +24,7 @@ export default async function PresentPage({ params }: Props) {
   if (!course || !mod) notFound();
 
   const session = await auth();
-  const isInstructor = session?.user?.role === "INSTRUCTOR";
+  const isInstructor = canInstruct(session?.user?.role);
 
   const chunks = splitIntoSlides(mod.content);
   const slideProse = "prose prose-invert prose-lg md:prose-xl max-w-none prose-headings:font-semibold";
