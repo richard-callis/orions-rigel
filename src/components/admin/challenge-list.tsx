@@ -9,6 +9,8 @@ export type AdminChallenge = {
   slug: string;
   title: string;
   difficulty: string;
+  language: string;
+  tags: string[];
   weekOf: string;
   isActive: boolean;
   _count: { submissions: number };
@@ -83,6 +85,16 @@ export function ChallengeList({ initialChallenges }: { initialChallenges: AdminC
                 <Link href={`/challenges`} className="hover:text-accent transition-colors">
                   {c.title}
                 </Link>
+                <div className="flex flex-wrap items-center gap-1 mt-1">
+                  <span className="rounded-full border border-border px-1.5 py-0.5 text-[10px] uppercase text-muted">
+                    {c.language}
+                  </span>
+                  {c.tags.map((tag) => (
+                    <span key={tag} className="rounded-full bg-surface-raised px-1.5 py-0.5 text-[10px] text-muted">
+                      {tag}
+                    </span>
+                  ))}
+                </div>
               </td>
               <td className="px-4 py-2.5 text-foreground-secondary capitalize">{c.difficulty}</td>
               <td className="px-4 py-2.5 text-foreground-secondary font-mono">

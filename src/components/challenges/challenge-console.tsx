@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql, PostgreSQL } from "@codemirror/lang-sql";
-import { Play, Send, RotateCcw, Loader2 } from "lucide-react";
+import { Play, Send, RotateCcw, Loader2, Maximize2, Minimize2 } from "lucide-react";
 import type { PGlite } from "@electric-sql/pglite";
+import { useSavedSnippets } from "@/lib/use-saved-snippets";
+import { SavedSnippetsButton, SaveSnippetButton } from "@/components/playground/saved-snippets";
 
 type QueryResult = {
   rows: Record<string, unknown>[];
@@ -21,16 +23,23 @@ type QueryResult = {
  * onSubmit (POST /api/challenges/submit) is authoritative.
  */
 export function ChallengeConsole({
+  challengeSlug,
   schemaSql,
   initialSql,
   onSubmit,
   submitting,
 }: {
+  challengeSlug: string;
   schemaSql: string;
   initialSql?: string;
   onSubmit: (sql: string) => void;
   submitting: boolean;
 }) {
+  // Reuses the course-console saved-snippets API/model with a namespaced
+  // scope key — a challenge slug never collides with a course slug, and a
+  // dedicated table for one more (userId, scope) -> snippet mapping isn't
+  // worth it.
+  const { signedIn, items: savedQueries, save, remove } = useSavedSnippets(`challenge:${challengeSlug}`);
   const dbRef = useRef<PGlite | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [initError, setInitError] = useState<string | null>(null);
@@ -45,6 +54,38 @@ export function ChallengeConsole({
   // effect dependency, since it never varies on its own for a mounted
   // console (one console per active challenge).
   const [resetGeneration, setResetGeneration] = useState(0);
+  const [fullscreen, setFullscreen] = useState(false);
+  // Editor pane height in px; the results pane below it stays flex-1 and
+  // just absorbs whatever's left, so only one dimension needs tracking.
+  const [editorHeight, setEditorHeight] = useState(220);
+  // e.movementY is unreliable (reports 0) in some browsers during pointer
+  // capture, so track the last clientY ourselves instead.
+  const lastYRef = useRef(0);
+
+  function startResize(e: React.PointerEvent<HTMLDivElement>) {
+    lastYRef.current = e.clientY;
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+  function onResize(e: React.PointerEvent<HTMLDivElement>) {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    const delta = e.clientY - lastYRef.current;
+    lastYRef.current = e.clientY;
+    setEditorHeight((h) => Math.min(Math.max(h + delta, 100), 900));
+  }
+  function stopResize(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  }
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setFullscreen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [fullscreen]);
 
   const initDb = useCallback(async () => {
     setStatus("loading");
@@ -107,7 +148,11 @@ export function ChallengeConsole({
 
   return (
     <div
-      className="flex h-full flex-col rounded-xl border border-border bg-surface overflow-hidden"
+      className={
+        fullscreen
+          ? "fixed inset-0 z-50 flex flex-col rounded-none border border-border bg-surface"
+          : "flex h-full flex-col rounded-xl border border-border bg-surface overflow-hidden"
+      }
       onKeyDown={(e) => {
         if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
           e.preventDefault();
@@ -128,17 +173,29 @@ export function ChallengeConsole({
             {status === "error" && "Failed to start sandbox"}
           </span>
         </div>
-        <button
-          onClick={handleReset}
-          disabled={status === "loading"}
-          className="flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs hover:bg-surface-raised transition-colors disabled:opacity-40 cursor-pointer"
-          title="Reset the sandbox back to its seed data"
-        >
-          <RotateCcw size={12} /> Reset
-        </button>
+        <div className="flex items-center gap-2">
+          {signedIn && (
+            <SavedSnippetsButton items={savedQueries} onLoad={(item) => setCode(item.content)} onDelete={remove} />
+          )}
+          <button
+            onClick={handleReset}
+            disabled={status === "loading"}
+            className="flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs hover:bg-surface-raised transition-colors disabled:opacity-40 cursor-pointer"
+            title="Reset the sandbox back to its seed data"
+          >
+            <RotateCcw size={12} /> Reset
+          </button>
+          <button
+            onClick={() => setFullscreen((v) => !v)}
+            className="flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs hover:bg-surface-raised transition-colors cursor-pointer"
+            title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+          >
+            {fullscreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+          </button>
+        </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden border-b border-border">
+      <div className="shrink-0 overflow-hidden border-b border-border" style={{ height: editorHeight }}>
         <CodeMirror
           value={code}
           onChange={setCode}
@@ -149,9 +206,18 @@ export function ChallengeConsole({
           basicSetup={{ lineNumbers: true, foldGutter: false }}
         />
       </div>
+      <div
+        onPointerDown={startResize}
+        onPointerMove={onResize}
+        onPointerUp={stopResize}
+        onPointerCancel={stopResize}
+        className="h-1.5 shrink-0 cursor-row-resize bg-border hover:bg-accent/50 transition-colors"
+        title="Drag to resize"
+      />
       <div className="flex items-center justify-between border-b border-border bg-surface-raised px-3 py-2">
         <span className="text-xs text-muted font-mono">⌘/Ctrl + Enter to run</span>
         <div className="flex items-center gap-2">
+          {signedIn && <SaveSnippetButton disabled={!code.trim()} onSave={(title) => save(title, code)} />}
           <button
             onClick={execute}
             disabled={status !== "ready" || running}

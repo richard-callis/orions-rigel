@@ -13,6 +13,11 @@ const schema = z.object({
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().min(1).max(10_000),
   difficulty: z.enum(["easy", "medium", "hard"]),
+  tags: z
+    .array(z.string().trim().min(1).max(40))
+    .max(10)
+    .default([])
+    .transform((tags) => Array.from(new Set(tags))),
   schemaSql: z.string().trim().min(1).max(20_000),
   hiddenSchemaSql: z.string().trim().min(1).max(20_000),
   solutionSql: z.string().trim().min(1).max(5_000),
@@ -35,6 +40,8 @@ export async function GET() {
       slug: true,
       title: true,
       difficulty: true,
+      language: true,
+      tags: true,
       weekOf: true,
       isActive: true,
       createdAt: true,
@@ -115,6 +122,7 @@ export async function POST(request: Request) {
         title: data.title,
         description: data.description,
         difficulty: data.difficulty,
+        tags: data.tags,
         schemaSql: data.schemaSql,
         hiddenSchemaSql: data.hiddenSchemaSql,
         solutionSql: data.solutionSql,

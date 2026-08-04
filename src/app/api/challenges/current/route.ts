@@ -14,6 +14,8 @@ export async function GET() {
       title: true,
       description: true,
       difficulty: true,
+      language: true,
+      tags: true,
       schemaSql: true,
       weekOf: true,
     },

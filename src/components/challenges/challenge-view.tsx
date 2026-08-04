@@ -11,6 +11,8 @@ type Challenge = {
   slug: string;
   title: string;
   difficulty: string;
+  language: string;
+  tags: string[];
   schemaSql: string;
   weekOf: string;
 };
@@ -127,6 +129,16 @@ export function ChallengeView({
             {challenge.difficulty} · Week of {new Date(challenge.weekOf).toLocaleDateString()}
           </p>
           <h1 className="text-3xl font-semibold tracking-tight mb-1">{challenge.title}</h1>
+          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+            <span className="rounded-full border border-border px-2 py-0.5 text-xs uppercase text-foreground-secondary">
+              {challenge.language}
+            </span>
+            {challenge.tags.map((tag) => (
+              <span key={tag} className="rounded-full bg-surface-raised px-2 py-0.5 text-xs text-foreground-secondary">
+                {tag}
+              </span>
+            ))}
+          </div>
         </div>
 
         {descriptionSlot}
@@ -155,6 +167,7 @@ export function ChallengeView({
       <div className="space-y-3">
         <div className="h-[420px]">
           <ChallengeConsole
+            challengeSlug={challenge.slug}
             schemaSql={challenge.schemaSql}
             initialSql={initialSql}
             onSubmit={handleSubmit}
