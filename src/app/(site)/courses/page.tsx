@@ -1,9 +1,18 @@
 import Link from "next/link";
+import { auth } from "@/lib/auth";
+import { canInstruct } from "@/lib/roles";
 import { getAllCourses, getAnyCourseModules } from "@/lib/content";
+import { SectionTabs } from "@/components/section-tabs";
 
 export const metadata = { title: "Courses · Technical Training" };
 
 export default async function CoursesPage() {
+  const session = await auth();
+  const tabs = [{ label: "Courses", href: "/courses" }];
+  if (canInstruct(session?.user?.role)) {
+    tabs.push({ label: "Create", href: "/admin/create-training" });
+  }
+
   const courses = await getAllCourses();
   const moduleCounts = await Promise.all(
     courses.map((course) => getAnyCourseModules(course.slug))
@@ -11,6 +20,7 @@ export default async function CoursesPage() {
 
   return (
     <div className="w-full mx-auto max-w-4xl px-4 py-12">
+      <SectionTabs tabs={tabs} active="/courses" />
       <h1 className="text-3xl font-semibold tracking-tight mb-2">Courses</h1>
       <p className="text-foreground-secondary mb-10">
         Hands-on courses with a live, in-browser database — run real queries as you learn.
