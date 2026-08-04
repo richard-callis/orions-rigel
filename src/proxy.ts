@@ -9,11 +9,12 @@ export default auth((req) => {
     return NextResponse.redirect(loginUrl);
   }
   const { pathname } = req.nextUrl;
-  // /admin/create-training is instructor-or-admin; the rest of /admin
-  // (role management) stays admin-only.
-  const allowed = pathname.startsWith("/admin/create-training")
-    ? canInstruct(req.auth.user?.role)
-    : !pathname.startsWith("/admin") || req.auth.user?.role === "ADMIN";
+  // /admin/create-training and /admin/challenges are instructor-or-admin;
+  // the rest of /admin (role management) stays admin-only.
+  const allowed =
+    pathname.startsWith("/admin/create-training") || pathname.startsWith("/admin/challenges")
+      ? canInstruct(req.auth.user?.role)
+      : !pathname.startsWith("/admin") || req.auth.user?.role === "ADMIN";
   if (!allowed) {
     return NextResponse.redirect(new URL("/dashboard", req.nextUrl.origin));
   }
