@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { gradeSqlSubmission } from "./grade-sql-challenge";
+import { gradeSqlSubmission, assertHiddenDatasetDiffers } from "./grade-sql-challenge";
 
 export type GeneratedChallengeDraft = {
   title: string;
@@ -118,6 +118,15 @@ export async function generateChallenge(params: {
       );
     }
   }
+
+  // Also confirm the two datasets are actually different — Claude
+  // generating hiddenSchemaSql as a near-copy of schemaSql would pass
+  // every check above while defeating the entire point of the field.
+  await assertHiddenDatasetDiffers({
+    schemaSql: draft.schemaSql,
+    hiddenSchemaSql: draft.hiddenSchemaSql,
+    checkQuery: draft.checkQuery,
+  });
 
   return draft;
 }

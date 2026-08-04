@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { canInstruct } from "@/lib/roles";
 import { slugify } from "@/lib/slugify";
-import { gradeSqlSubmission } from "@/lib/grade-sql-challenge";
+import { gradeSqlSubmission, assertHiddenDatasetDiffers } from "@/lib/grade-sql-challenge";
 
 const SLUG = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens only");
 
@@ -90,6 +90,19 @@ export async function POST(request: Request) {
         { status: 422 },
       );
     }
+  }
+
+  try {
+    await assertHiddenDatasetDiffers({
+      schemaSql: data.schemaSql,
+      hiddenSchemaSql: data.hiddenSchemaSql,
+      checkQuery: data.checkQuery,
+    });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Hidden grading data check failed" },
+      { status: 422 },
+    );
   }
 
   const result = await db.$transaction(async (tx) => {

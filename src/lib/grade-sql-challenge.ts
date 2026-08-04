@@ -1,5 +1,6 @@
 import { Worker } from "node:worker_threads";
 import path from "node:path";
+import { PGlite } from "@electric-sql/pglite";
 
 /**
  * Server-side, authoritative grading for weekly SQL challenge submissions.
@@ -39,7 +40,18 @@ export type GradeResult = {
   errorMessage: string | null;
 };
 
-const GRADE_TIMEOUT_MS = 5000;
+// worker.terminate() is the only real preemption available (see the doc
+// comment above — an internal per-query timeout inside the worker can't
+// preempt PGlite either, for the same reason a Promise.race around the
+// whole thing didn't), so this one timeout necessarily bounds the worker's
+// entire lifetime: spawn + two PGlite boots + checkQuery + the submission
+// itself + EXPLAIN. That fixed overhead measured ~2.85s: budgeting only
+// 5s total left a correct-but-not-trivial submission as little as ~2s of
+// real query time before getting killed and reported as "timed out" —
+// unfair to the student, not a meaningful cap on abuse either way, since
+// runtimeMs (what's actually stored/shown) only ever measures the
+// submission's own exec call, not this wrapper's overhead.
+const GRADE_TIMEOUT_MS = 10_000;
 const WORKER_PATH = path.join(process.cwd(), "src/lib/grade-sql-worker.mjs");
 
 export async function gradeSqlSubmission(params: {
@@ -90,4 +102,38 @@ export async function gradeSqlSubmission(params: {
       resolve({ passed: false, runtimeMs: 0, planCost: null, errorMessage: err.message });
     });
   });
+}
+
+/**
+ * Confirms schemaSql and hiddenSchemaSql actually produce different
+ * checkQuery results. Nothing else enforces this — a challenge published
+ * with identical data in both fields would pass every other check (the
+ * solution genuinely does match checkQuery against "both" datasets,
+ * because they're the same dataset) while silently reinstating the
+ * hardcoded-literal cheat this field exists to prevent. Admin-triggered
+ * (creation/generation), not per-student, so this runs PGlite directly
+ * rather than through the worker-isolated path submissions use.
+ */
+export async function assertHiddenDatasetDiffers(params: {
+  schemaSql: string;
+  hiddenSchemaSql: string;
+  checkQuery: string;
+}): Promise<void> {
+  async function run(schemaSql: string) {
+    const db = new PGlite();
+    try {
+      await db.exec(schemaSql);
+      const results = await db.exec(params.checkQuery);
+      return JSON.stringify(results[0]?.rows ?? []);
+    } finally {
+      await db.close();
+    }
+  }
+
+  const [publicResult, hiddenResult] = await Promise.all([run(params.schemaSql), run(params.hiddenSchemaSql)]);
+  if (publicResult === hiddenResult) {
+    throw new Error(
+      "Hidden grading data produces the exact same checkQuery result as the public schema — it needs different row values, or grading against it would be as guessable as the public example.",
+    );
+  }
 }

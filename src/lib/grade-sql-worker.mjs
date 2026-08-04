@@ -18,20 +18,28 @@ import { PGlite } from "@electric-sql/pglite";
 
 const SELECT_ONLY = /^\s*(with\b[\s\S]*?)?select\b/i;
 
-function stripSqlComments(sql) {
+// Strips comments AND blanks out string-literal contents (replacing each
+// character inside a string with "x", keeping the quotes) — a semicolon or
+// keyword inside a string body is syntactically inert and shouldn't affect
+// either the stacked-statement check or the SELECT_ONLY match below. A
+// naive strip that left string contents untouched would still wrongly
+// reject legitimate queries like `SELECT 'a;b'` as a stacked statement.
+function stripCommentsAndStrings(sql) {
   let out = "";
   let inString = false;
   for (let i = 0; i < sql.length; i++) {
     const ch = sql[i];
     if (inString) {
-      out += ch;
       if (ch === "'") {
         if (sql[i + 1] === "'") {
-          out += sql[i + 1];
+          out += "xx";
           i++;
         } else {
           inString = false;
+          out += ch;
         }
+      } else {
+        out += "x";
       }
       continue;
     }
@@ -56,7 +64,7 @@ function stripSqlComments(sql) {
 }
 
 function isSelectOnly(sql) {
-  const stripped = stripSqlComments(sql).trim();
+  const stripped = stripCommentsAndStrings(sql).trim();
   if (!stripped) return false;
   const withoutTrailingSemicolon = stripped.replace(/;\s*$/, "");
   if (withoutTrailingSemicolon.includes(";")) return false;
@@ -109,11 +117,21 @@ async function grade({ schemaSql, checkQuery, requireOrder, submittedSql }) {
       const results = await db.exec(`BEGIN READ ONLY; ${submittedSql}; ROLLBACK;`);
       submittedRows = results[1]?.rows ?? [];
     } catch (err) {
+      // Never echo the raw Postgres error back to the client. Postgres
+      // routinely embeds the offending VALUE in error text (e.g. a failed
+      // type cast reports what it tried to cast) — since the submission
+      // runs against hiddenSchemaSql, a query engineered to fail in a
+      // data-dependent way (cast a real column's value to a type that'll
+      // reject it, forcing the value into the error message) turns this
+      // into a read oracle over data the student is never supposed to
+      // see, one submission at a time. Logged server-side for debugging;
+      // the client only ever gets a fixed, content-free message.
+      console.error("[grade-sql-worker] submission execution failed:", err);
       return {
         passed: false,
         runtimeMs: Math.round(performance.now() - start),
         planCost: null,
-        errorMessage: err instanceof Error ? err.message : "Query failed to execute.",
+        errorMessage: "Your query failed to execute. Check its syntax and try again.",
       };
     }
     const runtimeMs = Math.round(performance.now() - start);
