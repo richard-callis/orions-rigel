@@ -1,17 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useSession } from "next-auth/react";
 import { CheckCircle2, XCircle, Loader2, Trophy } from "lucide-react";
 import { ChallengeConsole } from "./challenge-console";
-import { ChallengeDescription } from "./challenge-description";
 import { LeaderboardTable, type LeaderboardEntry } from "./leaderboard-table";
 
 type Challenge = {
   id: string;
   slug: string;
   title: string;
-  description: string;
   difficulty: string;
   schemaSql: string;
   weekOf: string;
@@ -31,7 +29,22 @@ const DIFFICULTY_COLOR: Record<string, string> = {
   hard: "text-error",
 };
 
-export function ChallengeView({ challenge }: { challenge: Challenge }) {
+export function ChallengeView({
+  challenge,
+  descriptionSlot,
+}: {
+  challenge: Challenge;
+  /**
+   * Rendered server-side (see challenges/page.tsx) and passed down as
+   * already-rendered JSX, not rendered here — MDXRemote (from
+   * next-mdx-remote/rsc, used by ChallengeDescription) is an async
+   * Server Component and can't run inside a "use client" module. This
+   * is the standard Next.js pattern for that: render the RSC in the
+   * server-component parent, thread it through the client component as
+   * a prop/children rather than importing it directly here.
+   */
+  descriptionSlot: ReactNode;
+}) {
   const { data: session, status: authStatus } = useSession();
 
   const [initialSql, setInitialSql] = useState<string | undefined>(undefined);
@@ -116,7 +129,7 @@ export function ChallengeView({ challenge }: { challenge: Challenge }) {
           <h1 className="text-3xl font-semibold tracking-tight mb-1">{challenge.title}</h1>
         </div>
 
-        <ChallengeDescription content={challenge.description} />
+        {descriptionSlot}
 
         {session?.user ? null : (
           <p className="text-sm text-muted rounded-lg border border-border bg-surface px-3 py-2">

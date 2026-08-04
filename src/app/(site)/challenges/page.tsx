@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { ChallengeView } from "@/components/challenges/challenge-view";
+import { ChallengeDescription } from "@/components/challenges/challenge-description";
 
 export const metadata = { title: "Weekly Challenge · Technical Training" };
 
@@ -36,6 +37,7 @@ export default async function ChallengesPage() {
     <div className="w-full mx-auto max-w-6xl px-4 py-12">
       <ChallengeView
         challenge={{ ...challenge, weekOf: challenge.weekOf.toISOString() }}
+        descriptionSlot={<ChallengeDescription content={challenge.description} />}
       />
     </div>
   );
