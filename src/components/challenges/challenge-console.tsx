@@ -58,19 +58,34 @@ export function ChallengeConsole({
   // Editor pane height in px; the results pane below it stays flex-1 and
   // just absorbs whatever's left, so only one dimension needs tracking.
   const [editorHeight, setEditorHeight] = useState(220);
-  const draggingRef = useRef(false);
+  // e.movementY is unreliable (reports 0) in some browsers during pointer
+  // capture, so track the last clientY ourselves instead.
+  const lastYRef = useRef(0);
 
   function startResize(e: React.PointerEvent<HTMLDivElement>) {
-    draggingRef.current = true;
+    lastYRef.current = e.clientY;
     e.currentTarget.setPointerCapture(e.pointerId);
   }
   function onResize(e: React.PointerEvent<HTMLDivElement>) {
-    if (!draggingRef.current) return;
-    setEditorHeight((h) => Math.min(Math.max(h + e.movementY, 100), 900));
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    const delta = e.clientY - lastYRef.current;
+    lastYRef.current = e.clientY;
+    setEditorHeight((h) => Math.min(Math.max(h + delta, 100), 900));
   }
-  function stopResize() {
-    draggingRef.current = false;
+  function stopResize(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
   }
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setFullscreen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [fullscreen]);
 
   const initDb = useCallback(async () => {
     setStatus("loading");
@@ -180,7 +195,7 @@ export function ChallengeConsole({
         </div>
       </div>
 
-      <div className="overflow-hidden border-b border-border" style={{ height: editorHeight }}>
+      <div className="shrink-0 overflow-hidden border-b border-border" style={{ height: editorHeight }}>
         <CodeMirror
           value={code}
           onChange={setCode}
@@ -195,6 +210,7 @@ export function ChallengeConsole({
         onPointerDown={startResize}
         onPointerMove={onResize}
         onPointerUp={stopResize}
+        onPointerCancel={stopResize}
         className="h-1.5 shrink-0 cursor-row-resize bg-border hover:bg-accent/50 transition-colors"
         title="Drag to resize"
       />

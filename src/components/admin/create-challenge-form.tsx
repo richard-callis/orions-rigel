@@ -228,10 +228,8 @@ export function CreateChallengeForm() {
               value={tagsInput}
               onChange={(e) => {
                 setTagsInput(e.target.value);
-                updateDraft(
-                  "tags",
-                  e.target.value.split(",").map((t) => t.trim()).filter(Boolean)
-                );
+                const tags = e.target.value.split(",").map((t) => t.trim()).filter(Boolean);
+                updateDraft("tags", Array.from(new Set(tags)));
               }}
               placeholder="e.g. joins, window-functions"
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent"
