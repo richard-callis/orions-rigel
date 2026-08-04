@@ -21,6 +21,8 @@ export default async function AdminChallengesPage() {
       slug: true,
       title: true,
       difficulty: true,
+      language: true,
+      tags: true,
       weekOf: true,
       isActive: true,
       _count: { select: { submissions: true } },

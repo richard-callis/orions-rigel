@@ -23,6 +23,8 @@ export default async function ChallengesPage() {
       title: true,
       description: true,
       difficulty: true,
+      language: true,
+      tags: true,
       schemaSql: true,
       weekOf: true,
     },

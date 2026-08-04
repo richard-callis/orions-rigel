@@ -257,6 +257,8 @@ model WeeklyChallenge {
   title       String
   description String // problem statement, Markdown
   difficulty  String // "easy" | "medium" | "hard"
+  language    String   @default("sql") // "sql" for now — grading only supports SQL; other languages are tagged for the future but not yet gradeable
+  tags        String[] @default([]) // freeform topic tags (e.g. "window-functions", "joins") for browsing/filtering
 
   // Public — sent to the client so students can freely explore in the
   // practice console before submitting. Same table/column structure as

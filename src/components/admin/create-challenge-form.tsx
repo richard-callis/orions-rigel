@@ -10,7 +10,7 @@ type Difficulty = "easy" | "medium" | "hard";
 
 const DIFFICULTIES: Difficulty[] = ["easy", "medium", "hard"];
 
-type ReviewState = GeneratedChallengeDraft & { slug: string; weekOf: string; activate: boolean };
+type ReviewState = GeneratedChallengeDraft & { slug: string; weekOf: string; activate: boolean; tags: string[] };
 
 function nextMonday(): string {
   const d = new Date();
@@ -32,6 +32,7 @@ const BLANK_DRAFT: ReviewState = {
   requireOrder: false,
   weekOf: nextMonday(),
   activate: false,
+  tags: [],
 };
 
 export function CreateChallengeForm() {
@@ -43,6 +44,10 @@ export function CreateChallengeForm() {
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<ReviewState | null>(null);
+  // Kept separate from draft.tags (the string[] the API expects) so the
+  // input can hold "tag1, " mid-typing without commas/spaces the user just
+  // typed getting silently stripped by a round-trip through the array.
+  const [tagsInput, setTagsInput] = useState("");
   // See PR #15's review history — a naive "if slug is empty" guard breaks
   // after the first keystroke. Only the slug field's own edit sets this.
   const [slugTouched, setSlugTouched] = useState(false);
@@ -64,6 +69,7 @@ export function CreateChallengeForm() {
       }
       const d: GeneratedChallengeDraft = body.draft;
       setSlugTouched(false);
+      setTagsInput("");
       setDraft({ ...BLANK_DRAFT, ...d, slug: slugify(d.title) });
     } catch {
       setError("Generation failed. Try again.");
@@ -75,6 +81,7 @@ export function CreateChallengeForm() {
   function handleWriteManually() {
     setError(null);
     setSlugTouched(false);
+    setTagsInput("");
     setDraft({ ...BLANK_DRAFT, difficulty });
   }
 
@@ -213,6 +220,29 @@ export function CreateChallengeForm() {
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent"
             />
           </div>
+        </div>
+        <div className="flex gap-4 items-end">
+          <div className="flex-1">
+            <label className="block text-sm font-medium mb-1">Tags (comma-separated)</label>
+            <input
+              value={tagsInput}
+              onChange={(e) => {
+                setTagsInput(e.target.value);
+                updateDraft(
+                  "tags",
+                  e.target.value.split(",").map((t) => t.trim()).filter(Boolean)
+                );
+              }}
+              placeholder="e.g. joins, window-functions"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-accent"
+            />
+          </div>
+          <span
+            className="rounded-lg border border-border px-3 py-2 text-sm text-foreground-secondary uppercase"
+            title="Grading only supports SQL right now"
+          >
+            SQL
+          </span>
         </div>
         <Field
           label="Description (Markdown)"
