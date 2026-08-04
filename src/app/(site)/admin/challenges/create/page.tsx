@@ -15,7 +15,7 @@ export default async function CreateChallengePage() {
     <div className="w-full mx-auto max-w-3xl px-4 py-12">
       <SectionTabs
         tabs={[
-          { label: "Challenge", href: "/challenges" },
+          { label: "Challenges", href: "/challenges" },
           { label: "Manage", href: "/admin/challenges" },
         ]}
         active="/admin/challenges"

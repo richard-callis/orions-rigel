@@ -12,6 +12,10 @@ export function SectionTabs({
   tabs: { label: string; href: string }[];
   active: string;
 }) {
+  // Nothing to switch between for a student/anonymous visitor — don't show
+  // an underlined single-tab bar just for one link.
+  if (tabs.length < 2) return null;
+
   return (
     <div className="flex items-center gap-1 mb-8 border-b border-border">
       {tabs.map((tab) => (

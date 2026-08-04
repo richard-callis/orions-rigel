@@ -10,7 +10,7 @@ export const metadata = { title: "Weekly Challenge · Technical Training" };
 
 export default async function ChallengesPage() {
   const session = await auth();
-  const tabs = [{ label: "Challenge", href: "/challenges" }];
+  const tabs = [{ label: "Challenges", href: "/challenges" }];
   if (canInstruct(session?.user?.role)) {
     tabs.push({ label: "Manage", href: "/admin/challenges" });
   }
