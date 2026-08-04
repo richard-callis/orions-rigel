@@ -10,6 +10,21 @@ import { PGlite } from "@electric-sql/pglite";
  * client-reported — a leaderboard is a much stronger incentive to cheat
  * than a personal progress tracker, so correctness, runtimeMs, and
  * planCost all have to come from code the client can't influence.
+ *
+ * Two independent defenses against a submission mutating the sandbox and
+ * then having that mutation silently determine "correctness":
+ *   1. checkQuery's expected result is computed FIRST, before the
+ *      submission ever runs, from data the submission hasn't touched yet.
+ *   2. The submission itself runs inside `BEGIN READ ONLY ... ROLLBACK`,
+ *      which Postgres enforces for real — DELETE/UPDATE/INSERT/DDL, and
+ *      critically data-modifying CTEs (`WITH d AS (DELETE ... RETURNING
+ *      *) SELECT ...`), all get rejected by the database itself. This is
+ *      the actual security boundary; isSelectOnly below is a fast,
+ *      friendlier-error pre-check on top of it, not a substitute for it —
+ *      a regex over SQL text can't reliably distinguish "select" appearing
+ *      in a comment from a real keyword (a `--` inside a string literal is
+ *      the classic trap), so it must never be the only thing standing
+ *      between a submission and the database.
  */
 
 export type GradeResult = {
@@ -21,18 +36,54 @@ export type GradeResult = {
 
 const SUBMISSION_TIMEOUT_MS = 5000;
 
-// Only a single read-only SELECT (or WITH ... SELECT) statement is allowed.
-// This is a judge for query-writing skill, not a general-purpose sandbox —
-// restricting to one SELECT closes off stacked-statement tricks entirely,
-// on top of the fact that each grading run already gets its own disposable
-// in-memory database that nothing else ever touches.
 const SELECT_ONLY = /^\s*(with\b[\s\S]*?)?select\b/i;
 
+// Strips -- and /* */ comments while tracking single-quoted string state,
+// so `SELECT '--not a comment'` isn't mistaken for one ending mid-string.
+// Doesn't handle every Postgres string-literal form (dollar-quoting,
+// backslash escapes under standard_conforming_strings=off) — acceptable
+// here because this function only feeds a pre-check with a friendlier
+// error message; READ ONLY below is what actually enforces "no writes,"
+// regardless of what this misses.
+function stripSqlComments(sql: string): string {
+  let out = "";
+  let inString = false;
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i];
+    if (inString) {
+      out += ch;
+      if (ch === "'") {
+        if (sql[i + 1] === "'") {
+          out += sql[i + 1];
+          i++;
+        } else {
+          inString = false;
+        }
+      }
+      continue;
+    }
+    if (ch === "'") {
+      inString = true;
+      out += ch;
+      continue;
+    }
+    if (ch === "-" && sql[i + 1] === "-") {
+      while (i < sql.length && sql[i] !== "\n") i++;
+      continue;
+    }
+    if (ch === "/" && sql[i + 1] === "*") {
+      i += 2;
+      while (i < sql.length && !(sql[i] === "*" && sql[i + 1] === "/")) i++;
+      i++;
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
 function isSelectOnly(sql: string): boolean {
-  const stripped = sql
-    .replace(/--.*$/gm, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .trim();
+  const stripped = stripSqlComments(sql).trim();
   if (!stripped) return false;
   const withoutTrailingSemicolon = stripped.replace(/;\s*$/, "");
   if (withoutTrailingSemicolon.includes(";")) return false; // stacked statements
@@ -96,16 +147,32 @@ export async function gradeSqlSubmission(params: {
       );
     }
 
+    // Computed before the submission ever runs — see module doc comment.
+    const checkResults = await withTimeout(
+      db.exec(params.checkQuery),
+      SUBMISSION_TIMEOUT_MS,
+      "checkQuery timed out",
+    );
+    const expectedRows = (checkResults[0]?.rows ?? []) as Row[];
+
     const start = performance.now();
     let submittedRows: Row[];
     try {
+      // The real enforcement: Postgres rejects any write (including a
+      // data-modifying CTE) inside a READ ONLY transaction, regardless of
+      // whether isSelectOnly's text-level check would have caught it.
       const results = await withTimeout(
-        db.exec(params.submittedSql),
+        db.exec(`BEGIN READ ONLY; ${params.submittedSql}; ROLLBACK;`),
         SUBMISSION_TIMEOUT_MS,
         "Query timed out — check for an unbounded join or a missing WHERE clause.",
       );
-      submittedRows = (results[0]?.rows ?? []) as Row[];
+      submittedRows = (results[1]?.rows ?? []) as Row[];
     } catch (err) {
+      // A rejected write surfaces here as a Postgres error (e.g. "cannot
+      // execute DELETE in a read-only transaction") — that message is
+      // clear enough to show as-is. The transaction is left aborted on
+      // this connection either way, but the connection is discarded in
+      // `finally` regardless, so nothing further is attempted on it.
       return {
         passed: false,
         runtimeMs: Math.round(performance.now() - start),
@@ -115,18 +182,22 @@ export async function gradeSqlSubmission(params: {
     }
     const runtimeMs = Math.round(performance.now() - start);
 
+    // A fresh connection for EXPLAIN and the pass/fail comparison — the
+    // one above may be left in an aborted-transaction state if the
+    // submission's ROLLBACK didn't get a chance to run cleanly.
+    const db2 = new PGlite();
     let planCost: number | null = null;
     try {
-      const explainResults = await db.exec(`EXPLAIN (FORMAT JSON) ${params.submittedSql}`);
-      const plan = explainResults[0]?.rows[0] as { "QUERY PLAN"?: [{ Plan?: { "Total Cost"?: number } }] } | undefined;
+      await db2.exec(params.schemaSql);
+      const explainResults = await db2.exec(`BEGIN READ ONLY; EXPLAIN (FORMAT JSON) ${params.submittedSql}; ROLLBACK;`);
+      const plan = explainResults[1]?.rows[0] as { "QUERY PLAN"?: [{ Plan?: { "Total Cost"?: number } }] } | undefined;
       planCost = plan?.["QUERY PLAN"]?.[0]?.Plan?.["Total Cost"] ?? null;
     } catch {
       // Non-fatal — efficiency is a secondary/display-only metric.
       // Correctness and speed still stand even if this fails.
+    } finally {
+      await db2.close();
     }
-
-    const checkResults = await db.exec(params.checkQuery);
-    const expectedRows = (checkResults[0]?.rows ?? []) as Row[];
 
     const passed = resultsMatch(expectedRows, submittedRows, params.requireOrder);
 

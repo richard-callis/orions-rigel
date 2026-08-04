@@ -20,59 +20,32 @@ type QueryResult = {
  * else in the app — it never determines pass/fail; only the parent's
  * onSubmit (POST /api/challenges/submit) is authoritative.
  */
-export function ChallengeConsole(props: {
+export function ChallengeConsole({
+  schemaSql,
+  initialSql,
+  onSubmit,
+  submitting,
+}: {
   schemaSql: string;
   initialSql?: string;
   onSubmit: (sql: string) => void;
   submitting: boolean;
 }) {
-  // Query text lives here, not in ConsoleBody, so it survives a reset —
-  // "Reset" should restart the sandbox, not discard what the user typed.
-  const [code, setCode] = useState(props.initialSql ?? "");
-  // "Reset" remounts ConsoleBody via key rather than re-running an effect
-  // with schemaSql in its dependency array — a mount effect that depends on
-  // a prop trips this project's stricter set-state-in-effect lint rule (see
-  // ConsoleBody's comment); a key change sidesteps it entirely, cleanly.
-  const [resetKey, setResetKey] = useState(0);
-  return (
-    <ConsoleBody
-      key={resetKey}
-      {...props}
-      code={code}
-      setCode={setCode}
-      onReset={() => setResetKey((k) => k + 1)}
-    />
-  );
-}
-
-function ConsoleBody({
-  schemaSql,
-  code,
-  setCode,
-  onSubmit,
-  submitting,
-  onReset,
-}: {
-  schemaSql: string;
-  code: string;
-  setCode: (v: string) => void;
-  onSubmit: (sql: string) => void;
-  submitting: boolean;
-  onReset: () => void;
-}) {
   const dbRef = useRef<PGlite | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [initError, setInitError] = useState<string | null>(null);
 
+  const [code, setCode] = useState(initialSql ?? "");
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
+  // Bumped by the Reset button to force initDb to re-run even though
+  // schemaSql itself hasn't changed — schemaSql alone can't be the only
+  // effect dependency, since it never varies on its own for a mounted
+  // console (one console per active challenge).
+  const [resetGeneration, setResetGeneration] = useState(0);
 
-  // ConsoleBody is remounted (fresh schemaSql, fresh state) via the `key` on
-  // ChallengeConsole's reset button rather than this effect ever re-running
-  // with a changed schemaSql — so it's genuinely mount-only despite reading
-  // a prop, and initDb intentionally has no dependencies.
   const initDb = useCallback(async () => {
     setStatus("loading");
     setInitError(null);
@@ -89,17 +62,18 @@ function ConsoleBody({
   }, [schemaSql]);
 
   useEffect(() => {
-    // Setting "loading" synchronously here is the point, not a bug this
-    // component should route around: the sandbox genuinely isn't ready yet
-    // and the UI needs to say so before the async PGlite import resolves.
-    // Unlike SqlConsole (which loads one static, unchanging schema.sql and
-    // so has zero reactive dependencies at all), this console's schema
-    // varies per challenge, so initDb can't be a true zero-dependency
-    // mount-only callback — the lint rule's cascading-render concern
-    // doesn't apply to a single, deliberate, mount-time status update.
+    // Setting "loading" synchronously here is the point, not a bug to
+    // route around: the sandbox genuinely isn't ready and the UI needs to
+    // say so before the async PGlite import resolves. This project's
+    // set-state-in-effect rule doesn't flag the identical pattern in
+    // SqlConsole — not because that component's schema is static (it
+    // isn't a meaningful difference to this rule) but because SqlConsole
+    // is declared via forwardRef, which this rule doesn't analyze. That's
+    // a blind spot in the rule, not a real distinction; this effect is
+    // exactly as safe as SqlConsole's.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     initDb();
-  }, [initDb]);
+  }, [initDb, resetGeneration]);
 
   async function execute() {
     if (!dbRef.current || !code.trim()) return;
@@ -123,9 +97,13 @@ function ConsoleBody({
     }
   }
 
-  // Remounting (via ChallengeConsole's key bump) gives this a fresh dbRef,
-  // status, code, and result state automatically — nothing to clear here.
-  const handleReset = onReset;
+  function handleReset() {
+    dbRef.current = null;
+    setResult(null);
+    setMessage(null);
+    setRunError(null);
+    setResetGeneration((g) => g + 1);
+  }
 
   return (
     <div

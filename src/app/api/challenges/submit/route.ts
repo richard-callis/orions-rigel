@@ -32,6 +32,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "This challenge isn't active" }, { status: 404 });
   }
 
+  const existing = await db.challengeSubmission.findUnique({
+    where: { challengeId_userId: { challengeId, userId: session.user.id } },
+    select: { passed: true, runtimeMs: true, attempts: true },
+  });
+
+  // Each submission spins up a real Postgres instance server-side (see
+  // grade-sql-challenge.ts) — cap attempts so that's bounded per user per
+  // challenge, and so runtimeMs on the leaderboard reflects genuine query
+  // performance rather than however many tries someone's willing to spam
+  // for a lucky fast run.
+  const MAX_ATTEMPTS = 50;
+  if (existing && existing.attempts >= MAX_ATTEMPTS) {
+    return NextResponse.json(
+      { error: `You've reached the ${MAX_ATTEMPTS}-attempt limit for this challenge.` },
+      { status: 429 },
+    );
+  }
+
   // Authoritative server-side grading — see grade-sql-challenge.ts. The
   // submitted SQL never runs against the real app database, only an
   // ephemeral in-memory sandbox seeded fresh for this one grading pass.
@@ -40,11 +58,6 @@ export async function POST(request: Request) {
     checkQuery: challenge.checkQuery,
     requireOrder: challenge.requireOrder,
     submittedSql: sql,
-  });
-
-  const existing = await db.challengeSubmission.findUnique({
-    where: { challengeId_userId: { challengeId, userId: session.user.id } },
-    select: { passed: true, runtimeMs: true },
   });
 
   // Keep the user's personal-best passing submission on record. If they've
