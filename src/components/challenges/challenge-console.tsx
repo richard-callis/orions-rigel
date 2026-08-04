@@ -138,39 +138,40 @@ export function ChallengeConsole({
         </button>
       </div>
 
-      <div className="border-b border-border">
+      <div className="flex-1 min-h-0 overflow-hidden border-b border-border">
         <CodeMirror
           value={code}
           onChange={setCode}
-          height="220px"
+          height="100%"
+          className="h-full"
           theme="dark"
           extensions={[sql({ dialect: PostgreSQL })]}
           basicSetup={{ lineNumbers: true, foldGutter: false }}
         />
-        <div className="flex items-center justify-between bg-surface-raised px-3 py-2">
-          <span className="text-xs text-muted font-mono">⌘/Ctrl + Enter to run</span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={execute}
-              disabled={status !== "ready" || running}
-              className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface transition-colors disabled:opacity-40 cursor-pointer"
-            >
-              {running ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-              Run
-            </button>
-            <button
-              onClick={() => onSubmit(code)}
-              disabled={!code.trim() || submitting}
-              className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer"
-            >
-              {submitting ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-              Submit
-            </button>
-          </div>
+      </div>
+      <div className="flex items-center justify-between border-b border-border bg-surface-raised px-3 py-2">
+        <span className="text-xs text-muted font-mono">⌘/Ctrl + Enter to run</span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={execute}
+            disabled={status !== "ready" || running}
+            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium hover:bg-surface transition-colors disabled:opacity-40 cursor-pointer"
+          >
+            {running ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
+            Run
+          </button>
+          <button
+            onClick={() => onSubmit(code)}
+            disabled={!code.trim() || submitting}
+            className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground hover:opacity-90 transition-opacity disabled:opacity-40 cursor-pointer"
+          >
+            {submitting ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+            Submit
+          </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-3 text-sm">
+      <div className="flex-1 min-h-0 overflow-auto p-3 text-sm">
         {initError && <p className="text-error font-mono text-xs whitespace-pre-wrap">{initError}</p>}
         {runError && <p className="text-error font-mono text-xs whitespace-pre-wrap">{runError}</p>}
         {message && !runError && <p className="text-foreground-secondary">{message}</p>}
