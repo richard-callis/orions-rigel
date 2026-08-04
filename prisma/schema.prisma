@@ -27,12 +27,13 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  progress         LessonProgress[]
-  reviewSchedules  ReviewSchedule[]
-  savedQueries     SavedQuery[]
-  quizResponses    QuizResponse[]
-  exerciseAttempts ExerciseAttempt[]
-  lessonFeedback   LessonFeedback[]
+  progress             LessonProgress[]
+  reviewSchedules      ReviewSchedule[]
+  savedQueries         SavedQuery[]
+  quizResponses        QuizResponse[]
+  exerciseAttempts     ExerciseAttempt[]
+  lessonFeedback       LessonFeedback[]
+  challengeSubmissions ChallengeSubmission[]
 }
 
 // One row per (user, lesson) once the user marks it complete.
@@ -121,7 +122,7 @@ model QuizResponse {
 model ExerciseAttempt {
   id          String   @id @default(cuid())
   userId      String
-  exerciseKey String   // synthetic key: ${courseSlug}:${moduleSlug}:${exerciseId}
+  exerciseKey String // synthetic key: ${courseSlug}:${moduleSlug}:${exerciseId}
   passed      Boolean
   attemptedAt DateTime @default(now()) @updatedAt
 
@@ -135,13 +136,13 @@ model ExerciseAttempt {
 // userId is plain (NOT a FK) to match the LiveSession/ActiveQuiz pattern —
 // ephemeral live-session data shouldn't cascade-delete when users are deleted.
 model LiveQuestion {
-  id          String   @id @default(cuid())
-  courseSlug  String
-  moduleSlug  String
-  text        String
-  userId      String
-  answered    Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  courseSlug String
+  moduleSlug String
+  text       String
+  userId     String
+  answered   Boolean  @default(false)
+  createdAt  DateTime @default(now())
 
   upvotes LiveQuestionUpvote[]
 
@@ -164,16 +165,16 @@ model LiveQuestionUpvote {
 // with an initial review interval. Students can review on a simple SM-2-lite
 // algorithm: easy reviews push the interval further, hard reviews reset it shorter.
 model ReviewSchedule {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   userId         String
   courseSlug     String
   moduleSlug     String
   dueAt          DateTime
-  intervalDays   Int      @default(1)
-  reviewCount    Int      @default(0)
+  intervalDays   Int       @default(1)
+  reviewCount    Int       @default(0)
   lastReviewedAt DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -183,14 +184,14 @@ model ReviewSchedule {
 
 // Student feedback on a lesson (1-5 star rating + optional comment).
 model LessonFeedback {
-  id          String   @id @default(cuid())
-  userId      String
-  courseSlug  String
-  moduleSlug  String
-  rating      Int      // 1-5
-  comment     String?  // Optional feedback text
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String   @id @default(cuid())
+  userId     String
+  courseSlug String
+  moduleSlug String
+  rating     Int // 1-5
+  comment    String? // Optional feedback text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -238,4 +239,60 @@ model GeneratedModule {
 
   @@unique([courseId, slug])
   @@unique([courseId, order])
+}
+
+// A weekly SQL challenge. AI can draft one (see /admin/challenges/create,
+// mirroring AI-assisted training creation), but nothing is visible to
+// students until an instructor/admin publishes it, and only one challenge
+// is isActive at a time — the admin controls the weekly rotation manually.
+//
+// Grading is server-side and authoritative (see /api/challenges/submit):
+// submitted SQL never runs against the real app database. It's executed in
+// an ephemeral sandbox seeded from schemaSql, alongside checkQuery, and the
+// two result sets are compared. solutionSql/checkQuery are never sent to
+// the client — leaking them would leak the answer.
+model WeeklyChallenge {
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  title        String
+  description  String // problem statement, Markdown
+  difficulty   String // "easy" | "medium" | "hard"
+  schemaSql    String // DDL + seed data loaded into the sandbox before grading
+  solutionSql  String // reference solution — lets the author sanity-check checkQuery against it, never shown to students while active
+  checkQuery   String // canonical query defining "correct"; compared against the submission's result set
+  requireOrder Boolean  @default(false) // if true, row order must match checkQuery's; if false, compared as sets
+  weekOf       DateTime // Monday (UTC) this challenge is meant to be active for
+  isActive     Boolean  @default(false)
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  submissions ChallengeSubmission[]
+
+  @@index([isActive])
+  @@index([weekOf])
+}
+
+// One row per (user, challenge) — a user's best passing submission, or
+// their latest failing one if they haven't passed yet. runtimeMs and
+// planCost are measured server-side at grading time, not client-reported,
+// so the leaderboard can't be gamed by posting fabricated numbers.
+model ChallengeSubmission {
+  id           String   @id @default(cuid())
+  challengeId  String
+  userId       String
+  sql          String
+  passed       Boolean
+  runtimeMs    Int // wall-clock time to execute the submitted query in the sandbox
+  planCost     Float? // EXPLAIN's estimated Total Cost — a stand-in for query efficiency, comparable since every submission runs against the same seeded data
+  errorMessage String?
+  attempts     Int      @default(1)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  challenge WeeklyChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([challengeId, userId])
+  @@index([challengeId, passed, runtimeMs])
 }

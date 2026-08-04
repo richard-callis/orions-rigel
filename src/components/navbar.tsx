@@ -19,6 +19,9 @@ export function Navbar() {
           <Link href="/courses" className="hover:text-accent transition-colors">
             Courses
           </Link>
+          <Link href="/challenges" className="hover:text-accent transition-colors">
+            Challenge
+          </Link>
 
           {status === "authenticated" ? (
             <>
@@ -29,9 +32,14 @@ export function Navbar() {
                 Review
               </Link>
               {canInstruct(session.user?.role) && (
-                <Link href="/admin/create-training" className="hover:text-accent transition-colors">
-                  Create training
-                </Link>
+                <>
+                  <Link href="/admin/create-training" className="hover:text-accent transition-colors">
+                    Create training
+                  </Link>
+                  <Link href="/admin/challenges" className="hover:text-accent transition-colors">
+                    Challenges
+                  </Link>
+                </>
               )}
               {session.user?.role === "ADMIN" && (
                 <Link href="/admin/users" className="hover:text-accent transition-colors">
