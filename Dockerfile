@@ -41,6 +41,10 @@ COPY --from=deps-prod /app/node_modules ./node_modules
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/src/generated ./src/generated
+# Plain JS, not resolved through Next's build/bundling — the weekly
+# challenge grader spawns this as a worker_threads Worker, which needs a
+# real file on disk. See grade-sql-challenge.ts.
+COPY --from=builder /app/src/lib/grade-sql-worker.mjs ./src/lib/grade-sql-worker.mjs
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/next.config.ts ./next.config.ts

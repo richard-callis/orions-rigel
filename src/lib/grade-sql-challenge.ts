@@ -1,4 +1,5 @@
-import { PGlite } from "@electric-sql/pglite";
+import { Worker } from "node:worker_threads";
+import path from "node:path";
 
 /**
  * Server-side, authoritative grading for weekly SQL challenge submissions.
@@ -11,20 +12,24 @@ import { PGlite } from "@electric-sql/pglite";
  * than a personal progress tracker, so correctness, runtimeMs, and
  * planCost all have to come from code the client can't influence.
  *
- * Two independent defenses against a submission mutating the sandbox and
- * then having that mutation silently determine "correctness":
- *   1. checkQuery's expected result is computed FIRST, before the
- *      submission ever runs, from data the submission hasn't touched yet.
- *   2. The submission itself runs inside `BEGIN READ ONLY ... ROLLBACK`,
- *      which Postgres enforces for real — DELETE/UPDATE/INSERT/DDL, and
- *      critically data-modifying CTEs (`WITH d AS (DELETE ... RETURNING
- *      *) SELECT ...`), all get rejected by the database itself. This is
- *      the actual security boundary; isSelectOnly below is a fast,
- *      friendlier-error pre-check on top of it, not a substitute for it —
- *      a regex over SQL text can't reliably distinguish "select" appearing
- *      in a comment from a real keyword (a `--` inside a string literal is
- *      the classic trap), so it must never be the only thing standing
- *      between a submission and the database.
+ * The actual PGlite work happens in grade-sql-worker.mjs, in its own
+ * worker thread, not inline here. PGlite is synchronous WASM running
+ * in-process — a Promise.race timeout around it does nothing, since the
+ * event loop is blocked for the query's entire duration regardless (a
+ * runaway submission, e.g. an unbounded cross join, was measured wedging
+ * the whole Node process — every other request, not just this one — for
+ * minutes). A worker thread is genuinely preemptible: worker.terminate()
+ * kills it outright, and the rest of the server keeps serving requests
+ * throughout. The worker is a separate plain-JS file, not a TS module
+ * resolved through this project's path aliases, because worker_threads
+ * needs a real file on disk and this project's runtime Docker image
+ * copies compiled .next output plus src/generated, not the general src/
+ * tree — grade-sql-worker.mjs is copied explicitly (see Dockerfile).
+ *
+ * gradingSchemaSql must be a dataset the student never sees — see the
+ * WeeklyChallenge.hiddenSchemaSql doc comment for why using the same
+ * data shown in the practice console would let a submission that just
+ * hardcodes the answer's literal values pass.
  */
 
 export type GradeResult = {
@@ -34,180 +39,55 @@ export type GradeResult = {
   errorMessage: string | null;
 };
 
-const SUBMISSION_TIMEOUT_MS = 5000;
-
-const SELECT_ONLY = /^\s*(with\b[\s\S]*?)?select\b/i;
-
-// Strips -- and /* */ comments while tracking single-quoted string state,
-// so `SELECT '--not a comment'` isn't mistaken for one ending mid-string.
-// Doesn't handle every Postgres string-literal form (dollar-quoting,
-// backslash escapes under standard_conforming_strings=off) — acceptable
-// here because this function only feeds a pre-check with a friendlier
-// error message; READ ONLY below is what actually enforces "no writes,"
-// regardless of what this misses.
-function stripSqlComments(sql: string): string {
-  let out = "";
-  let inString = false;
-  for (let i = 0; i < sql.length; i++) {
-    const ch = sql[i];
-    if (inString) {
-      out += ch;
-      if (ch === "'") {
-        if (sql[i + 1] === "'") {
-          out += sql[i + 1];
-          i++;
-        } else {
-          inString = false;
-        }
-      }
-      continue;
-    }
-    if (ch === "'") {
-      inString = true;
-      out += ch;
-      continue;
-    }
-    if (ch === "-" && sql[i + 1] === "-") {
-      while (i < sql.length && sql[i] !== "\n") i++;
-      continue;
-    }
-    if (ch === "/" && sql[i + 1] === "*") {
-      i += 2;
-      while (i < sql.length && !(sql[i] === "*" && sql[i + 1] === "/")) i++;
-      i++;
-      continue;
-    }
-    out += ch;
-  }
-  return out;
-}
-
-function isSelectOnly(sql: string): boolean {
-  const stripped = stripSqlComments(sql).trim();
-  if (!stripped) return false;
-  const withoutTrailingSemicolon = stripped.replace(/;\s*$/, "");
-  if (withoutTrailingSemicolon.includes(";")) return false; // stacked statements
-  return SELECT_ONLY.test(withoutTrailingSemicolon);
-}
-
-type Row = Record<string, unknown>;
-
-// Order-insensitive by default: stringify each row's entries sorted by
-// column name, so column order in the SELECT list doesn't matter, then
-// compare as multisets (or in-order if the challenge requires it).
-function normalizeRow(row: Row): string {
-  return JSON.stringify(Object.entries(row).sort(([a], [b]) => a.localeCompare(b)));
-}
-
-function resultsMatch(expected: Row[], actual: Row[], requireOrder: boolean): boolean {
-  if (expected.length !== actual.length) return false;
-  const expectedNorm = expected.map(normalizeRow);
-  const actualNorm = actual.map(normalizeRow);
-  if (requireOrder) {
-    return expectedNorm.every((r, i) => r === actualNorm[i]);
-  }
-  const a = [...expectedNorm].sort();
-  const b = [...actualNorm].sort();
-  return a.every((r, i) => r === b[i]);
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
-  let timer: ReturnType<typeof setTimeout>;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(message)), ms);
-  });
-  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-}
+const GRADE_TIMEOUT_MS = 5000;
+const WORKER_PATH = path.join(process.cwd(), "src/lib/grade-sql-worker.mjs");
 
 export async function gradeSqlSubmission(params: {
-  schemaSql: string;
+  gradingSchemaSql: string;
   checkQuery: string;
   requireOrder: boolean;
   submittedSql: string;
 }): Promise<GradeResult> {
-  if (!isSelectOnly(params.submittedSql)) {
-    return {
-      passed: false,
-      runtimeMs: 0,
-      planCost: null,
-      errorMessage: "Only a single SELECT (or WITH ... SELECT) statement is allowed.",
-    };
-  }
+  return new Promise((resolve) => {
+    const worker = new Worker(WORKER_PATH, {
+      workerData: {
+        schemaSql: params.gradingSchemaSql,
+        checkQuery: params.checkQuery,
+        requireOrder: params.requireOrder,
+        submittedSql: params.submittedSql,
+      },
+    });
 
-  const db = new PGlite();
-  try {
-    try {
-      await withTimeout(db.exec(params.schemaSql), SUBMISSION_TIMEOUT_MS, "Sandbox setup timed out");
-    } catch (err) {
-      // A broken schemaSql is an authoring bug, not the student's fault —
-      // surface it distinctly so an instructor notices, not so a student
-      // thinks their query is wrong.
-      throw new Error(
-        `Challenge sandbox failed to initialize: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-
-    // Computed before the submission ever runs — see module doc comment.
-    const checkResults = await withTimeout(
-      db.exec(params.checkQuery),
-      SUBMISSION_TIMEOUT_MS,
-      "checkQuery timed out",
-    );
-    const expectedRows = (checkResults[0]?.rows ?? []) as Row[];
-
-    const start = performance.now();
-    let submittedRows: Row[];
-    try {
-      // The real enforcement: Postgres rejects any write (including a
-      // data-modifying CTE) inside a READ ONLY transaction, regardless of
-      // whether isSelectOnly's text-level check would have caught it.
-      const results = await withTimeout(
-        db.exec(`BEGIN READ ONLY; ${params.submittedSql}; ROLLBACK;`),
-        SUBMISSION_TIMEOUT_MS,
-        "Query timed out — check for an unbounded join or a missing WHERE clause.",
-      );
-      submittedRows = (results[1]?.rows ?? []) as Row[];
-    } catch (err) {
-      // A rejected write surfaces here as a Postgres error (e.g. "cannot
-      // execute DELETE in a read-only transaction") — that message is
-      // clear enough to show as-is. The transaction is left aborted on
-      // this connection either way, but the connection is discarded in
-      // `finally` regardless, so nothing further is attempted on it.
-      return {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      worker.terminate();
+      resolve({
         passed: false,
-        runtimeMs: Math.round(performance.now() - start),
+        runtimeMs: GRADE_TIMEOUT_MS,
         planCost: null,
-        errorMessage: err instanceof Error ? err.message : "Query failed to execute.",
-      };
-    }
-    const runtimeMs = Math.round(performance.now() - start);
+        errorMessage: "Query timed out — check for an unbounded join or a missing WHERE clause.",
+      });
+    }, GRADE_TIMEOUT_MS);
 
-    // A fresh connection for EXPLAIN and the pass/fail comparison — the
-    // one above may be left in an aborted-transaction state if the
-    // submission's ROLLBACK didn't get a chance to run cleanly.
-    const db2 = new PGlite();
-    let planCost: number | null = null;
-    try {
-      await db2.exec(params.schemaSql);
-      const explainResults = await db2.exec(`BEGIN READ ONLY; EXPLAIN (FORMAT JSON) ${params.submittedSql}; ROLLBACK;`);
-      const plan = explainResults[1]?.rows[0] as { "QUERY PLAN"?: [{ Plan?: { "Total Cost"?: number } }] } | undefined;
-      planCost = plan?.["QUERY PLAN"]?.[0]?.Plan?.["Total Cost"] ?? null;
-    } catch {
-      // Non-fatal — efficiency is a secondary/display-only metric.
-      // Correctness and speed still stand even if this fails.
-    } finally {
-      await db2.close();
-    }
+    worker.on("message", (msg: { ok: true; result: GradeResult } | { ok: false; error: string }) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      worker.terminate();
+      if (msg.ok) {
+        resolve(msg.result);
+      } else {
+        resolve({ passed: false, runtimeMs: 0, planCost: null, errorMessage: msg.error });
+      }
+    });
 
-    const passed = resultsMatch(expectedRows, submittedRows, params.requireOrder);
-
-    return {
-      passed,
-      runtimeMs,
-      planCost,
-      errorMessage: passed ? null : "Your query's results don't match the expected output.",
-    };
-  } finally {
-    await db.close();
-  }
+    worker.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ passed: false, runtimeMs: 0, planCost: null, errorMessage: err.message });
+    });
+  });
 }

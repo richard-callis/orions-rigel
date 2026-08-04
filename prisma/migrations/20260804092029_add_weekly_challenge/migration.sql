@@ -6,6 +6,7 @@ CREATE TABLE "WeeklyChallenge" (
     "description" TEXT NOT NULL,
     "difficulty" TEXT NOT NULL,
     "schemaSql" TEXT NOT NULL,
+    "hiddenSchemaSql" TEXT NOT NULL,
     "solutionSql" TEXT NOT NULL,
     "checkQuery" TEXT NOT NULL,
     "requireOrder" BOOLEAN NOT NULL DEFAULT false,

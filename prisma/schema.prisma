@@ -252,12 +252,29 @@ model GeneratedModule {
 // two result sets are compared. solutionSql/checkQuery are never sent to
 // the client — leaking them would leak the answer.
 model WeeklyChallenge {
-  id           String   @id @default(cuid())
-  slug         String   @unique
-  title        String
-  description  String // problem statement, Markdown
-  difficulty   String // "easy" | "medium" | "hard"
-  schemaSql    String // DDL + seed data loaded into the sandbox before grading
+  id          String @id @default(cuid())
+  slug        String @unique
+  title       String
+  description String // problem statement, Markdown
+  difficulty  String // "easy" | "medium" | "hard"
+
+  // Public — sent to the client so students can freely explore in the
+  // practice console before submitting. Same table/column structure as
+  // hiddenSchemaSql, different row values.
+  schemaSql String
+
+  // Never sent to any client-facing API route — the actual grading run
+  // (see grade-sql-challenge.ts) always uses this instead of schemaSql.
+  // If grading used the same data students can already see, a submission
+  // that just hardcodes the answer's literal values (solve it once by
+  // reading the visible rows, then `SELECT 'x', 1 UNION ALL ...` instead
+  // of writing a query that actually computes the answer) would pass and
+  // even top the leaderboard on speed, since it does no real work.
+  // Comparing against different underlying data closes that off: a
+  // memorized literal answer is correct for the public dataset's values,
+  // not the hidden one's.
+  hiddenSchemaSql String
+
   solutionSql  String // reference solution — lets the author sanity-check checkQuery against it, never shown to students while active
   checkQuery   String // canonical query defining "correct"; compared against the submission's result set
   requireOrder Boolean  @default(false) // if true, row order must match checkQuery's; if false, compared as sets

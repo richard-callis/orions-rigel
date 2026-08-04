@@ -26,6 +26,7 @@ const BLANK_DRAFT: ReviewState = {
   description: "",
   difficulty: "medium",
   schemaSql: "",
+  hiddenSchemaSql: "",
   solutionSql: "",
   checkQuery: "",
   requireOrder: false,
@@ -225,7 +226,7 @@ export function CreateChallengeForm() {
       <div className="rounded-xl border border-border bg-surface p-5 space-y-4">
         <p className="eyebrow">Sandbox &amp; grading</p>
         <Field
-          label="Schema SQL (DDL + seed data — this is the entire sandbox a submission runs against)"
+          label="Schema SQL (DDL + example data students can see and explore in the practice console)"
           value={draft.schemaSql}
           onChange={(v) => updateDraft("schemaSql", v)}
           textarea
@@ -233,7 +234,15 @@ export function CreateChallengeForm() {
           rows={8}
         />
         <Field
-          label="Reference solution (a single SELECT — verified against Check query before publish)"
+          label="Hidden grading data (same table/column structure, different row values — students never see this; submissions are graded against it, not the schema above, so a solution that just hardcodes the visible example's answer can't pass)"
+          value={draft.hiddenSchemaSql}
+          onChange={(v) => updateDraft("hiddenSchemaSql", v)}
+          textarea
+          mono
+          rows={8}
+        />
+        <Field
+          label="Reference solution (a single SELECT — verified against Check query, on both datasets above, before publish)"
           value={draft.solutionSql}
           onChange={(v) => updateDraft("solutionSql", v)}
           textarea

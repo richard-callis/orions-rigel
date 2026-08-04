@@ -26,7 +26,7 @@ export async function POST(request: Request) {
 
   const challenge = await db.weeklyChallenge.findUnique({
     where: { id: challengeId },
-    select: { id: true, isActive: true, schemaSql: true, checkQuery: true, requireOrder: true },
+    select: { id: true, isActive: true, hiddenSchemaSql: true, checkQuery: true, requireOrder: true },
   });
   if (!challenge || !challenge.isActive) {
     return NextResponse.json({ error: "This challenge isn't active" }, { status: 404 });
@@ -53,8 +53,11 @@ export async function POST(request: Request) {
   // Authoritative server-side grading — see grade-sql-challenge.ts. The
   // submitted SQL never runs against the real app database, only an
   // ephemeral in-memory sandbox seeded fresh for this one grading pass.
+  // Graded against hiddenSchemaSql, never the public schemaSql the
+  // console exposes for exploration — see the schema's doc comment for
+  // why (a hardcoded-literal "solution" would otherwise pass).
   const grade = await gradeSqlSubmission({
-    schemaSql: challenge.schemaSql,
+    gradingSchemaSql: challenge.hiddenSchemaSql,
     checkQuery: challenge.checkQuery,
     requireOrder: challenge.requireOrder,
     submittedSql: sql,
