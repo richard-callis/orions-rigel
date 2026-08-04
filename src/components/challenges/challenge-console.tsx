@@ -143,6 +143,7 @@ export function ChallengeConsole({
           value={code}
           onChange={setCode}
           height="100%"
+          className="h-full"
           theme="dark"
           extensions={[sql({ dialect: PostgreSQL })]}
           basicSetup={{ lineNumbers: true, foldGutter: false }}
