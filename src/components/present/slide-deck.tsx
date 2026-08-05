@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { ChevronLeft, ChevronRight, X, Radio, ArrowDownToLine } from "lucide-react";
+import { ChevronLeft, ChevronRight, X, Radio, ArrowDownToLine, Hourglass } from "lucide-react";
 import { LiveQA } from "./live-qa";
 
 type LiveSessionState = {
@@ -33,6 +33,7 @@ export function SlideDeck({
   const [index, setIndex] = useState(0);
   const [live, setLive] = useState<LiveSessionState>(null);
   const [pending, setPending] = useState(false);
+  const [checkedLive, setCheckedLive] = useState(false);
   const total = slides.length;
 
   const { data: authSession } = useSession();
@@ -43,8 +44,15 @@ export function SlideDeck({
   const liveSlide = live?.currentSlide ?? null;
   const ownedByMe = isInstructor && live?.instructorId === myId;
 
+  // Non-instructors can't see any slide content until a session is live —
+  // Present Mode is instructor-led, not a second copy of the self-study
+  // page. Instructors always see the deck so they can prep/navigate before
+  // going live.
+  const waitingForInstructor = !isInstructor && checkedLive && !liveActive;
+
   // Poll the module's live session — instructors need to resume/notice
-  // conflicts, everyone else needs it to cap forward navigation.
+  // conflicts, everyone else needs it to cap forward navigation and to know
+  // when a session starts.
   useEffect(() => {
     let ignore = false;
     async function poll() {
@@ -54,6 +62,7 @@ export function SlideDeck({
       if (res.ok && !ignore) {
         const body = await res.json();
         setLive(body.session);
+        setCheckedLive(true);
       }
     }
     poll();
@@ -156,6 +165,32 @@ export function SlideDeck({
     } finally {
       setPending(false);
     }
+  }
+
+  // Not an instructor, and we've confirmed (not just defaulted-to-false)
+  // that no session is live: don't render the deck at all.
+  if (!isInstructor && !checkedLive) {
+    return <div className="fixed inset-0 bg-background" />;
+  }
+
+  if (waitingForInstructor) {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center gap-4 bg-background text-foreground">
+        <Hourglass size={28} className="text-muted" />
+        <div className="text-center">
+          <p className="text-lg font-medium">Waiting for the instructor to go live</p>
+          <p className="mt-1 text-sm text-foreground-secondary">
+            {courseTitle} · {title}
+          </p>
+        </div>
+        <Link
+          href={exitHref}
+          className="mt-4 flex items-center gap-1 text-sm text-muted hover:text-foreground transition-colors"
+        >
+          <X size={14} /> Exit
+        </Link>
+      </div>
+    );
   }
 
   return (
