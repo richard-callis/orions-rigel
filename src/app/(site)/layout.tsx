@@ -4,6 +4,7 @@ import "../globals.css";
 import { auth } from "@/lib/auth";
 import { AuthSessionProvider } from "@/components/session-provider";
 import { Navbar } from "@/components/navbar";
+import { LiveSessionBanner } from "@/components/live-session-banner";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -35,6 +36,7 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col">
         <AuthSessionProvider session={session}>
           <Navbar />
+          <LiveSessionBanner />
           <main className="flex-1 flex flex-col">{children}</main>
         </AuthSessionProvider>
       </body>

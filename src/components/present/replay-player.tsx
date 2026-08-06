@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Pause, Play, X } from "lucide-react";
 import { slideIndexAt, type SessionEvent } from "@/lib/session-events";
+import { AttendancePanel, type AttendanceRow } from "./attendance-panel";
 
 function formatTime(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
@@ -20,6 +21,7 @@ export function ReplayPlayer({
   events,
   durationMs,
   isActive,
+  attendance,
 }: {
   slides: ReactNode[];
   title: string;
@@ -28,6 +30,8 @@ export function ReplayPlayer({
   events: SessionEvent[];
   durationMs: number;
   isActive: boolean;
+  /** Instructor-only — undefined for non-instructor viewers, who see no attendance panel. */
+  attendance?: AttendanceRow[];
 }) {
   const total = slides.length;
   const [currentMs, setCurrentMs] = useState(0);
@@ -83,6 +87,8 @@ export function ReplayPlayer({
       <div className="flex-1 overflow-y-auto px-10 py-6 md:px-20">
         <div className="mx-auto max-w-4xl">{slides[slideIndex]}</div>
       </div>
+
+      {attendance && <AttendancePanel rows={attendance} totalSlides={total} />}
 
       <div className="px-6 pb-3">
         <input

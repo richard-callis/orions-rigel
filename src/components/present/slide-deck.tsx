@@ -2,15 +2,28 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { ChevronLeft, ChevronRight, X, Radio, ArrowDownToLine, Hourglass } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  X,
+  Radio,
+  ArrowDownToLine,
+  Hourglass,
+  ArrowRight,
+} from "lucide-react";
 import { LiveQA } from "./live-qa";
+import { LiveChat } from "./live-chat";
 
 type LiveSessionState = {
   id: string;
+  courseSlug: string;
+  moduleSlug: string;
   currentSlide: number;
   isActive: boolean;
   instructorId: string;
+  roomCode: string;
 } | null;
 
 export function SlideDeck({
@@ -21,6 +34,8 @@ export function SlideDeck({
   courseSlug,
   moduleSlug,
   isInstructor,
+  nextModuleSlug,
+  nextModuleTitle,
 }: {
   slides: ReactNode[];
   title: string;
@@ -29,7 +44,10 @@ export function SlideDeck({
   courseSlug: string;
   moduleSlug: string;
   isInstructor: boolean;
+  nextModuleSlug: string | null;
+  nextModuleTitle: string | null;
 }) {
+  const router = useRouter();
   const [index, setIndex] = useState(0);
   const [live, setLive] = useState<LiveSessionState>(null);
   const [pending, setPending] = useState(false);
@@ -50,9 +68,19 @@ export function SlideDeck({
   // going live.
   const waitingForInstructor = !isInstructor && checkedLive && !liveActive;
 
-  // Poll the module's live session — instructors need to resume/notice
-  // conflicts, everyone else needs it to cap forward navigation and to know
-  // when a session starts.
+  // Once we know a session's roomCode (from either poll below), keep
+  // polling it by room instead of by courseSlug+moduleSlug — a room code
+  // is stable across the instructor advancing to the next module (see
+  // /api/live-sessions/[id]/advance), while courseSlug+moduleSlug is not.
+  // This is what lets viewers follow module-to-module without re-joining.
+  const knownRoomCodeRef = useRef<string | null>(null);
+
+  // Poll the module's live session. This is the entry-point poll — it's
+  // how a viewer first discovers a session on the module they opened —
+  // and it's what the instructor uses to resume/notice conflicts. Once a
+  // roomCode is known, the room-scoped poll below takes over as the
+  // source of truth and this one goes idle (except to keep instructor
+  // conflict-detection accurate).
   useEffect(() => {
     let ignore = false;
     async function poll() {
@@ -61,7 +89,12 @@ export function SlideDeck({
       );
       if (res.ok && !ignore) {
         const body = await res.json();
-        setLive(body.session);
+        if (!knownRoomCodeRef.current) {
+          setLive(body.session);
+        }
+        if (body.session?.roomCode) {
+          knownRoomCodeRef.current = body.session.roomCode;
+        }
         setCheckedLive(true);
       }
     }
@@ -72,6 +105,39 @@ export function SlideDeck({
       clearInterval(interval);
     };
   }, [courseSlug, moduleSlug]);
+
+  // Room-scoped poll: once we know the roomCode, this is authoritative.
+  // For non-instructors, if the session's moduleSlug has moved on from
+  // this page's moduleSlug (the instructor advanced), navigate to follow —
+  // same room, no re-join, no new code.
+  useEffect(() => {
+    const roomCode = knownRoomCodeRef.current;
+    if (!roomCode) return;
+
+    let ignore = false;
+    async function poll() {
+      const res = await fetch(`/api/live-sessions/by-room?roomCode=${encodeURIComponent(roomCode!)}`);
+      if (!res.ok || ignore) return;
+      const body = await res.json();
+      const session = body.session as LiveSessionState;
+      if (!session) {
+        setLive(null);
+        return;
+      }
+      if (!isInstructor && session.moduleSlug !== moduleSlug) {
+        router.push(`/present/${session.courseSlug}/${session.moduleSlug}`);
+        return;
+      }
+      setLive(session);
+    }
+    poll();
+    const interval = setInterval(poll, 2500);
+    return () => {
+      ignore = true;
+      clearInterval(interval);
+    };
+    // Re-runs once knownRoomCodeRef gets set via `live` changing.
+  }, [live?.roomCode, isInstructor, moduleSlug, router]);
 
   // Instructor: push local slide changes up as the source of truth.
   useEffect(() => {
@@ -107,6 +173,33 @@ export function SlideDeck({
   const effectiveMax =
     !isInstructor && liveActive && liveSlide !== null ? Math.min(liveSlide, total - 1) : total - 1;
 
+  // Report attendance progress as the student follows along, and mark the
+  // module complete (with live-attendance credit) the moment they reach the
+  // final slide while a session is live. This is what makes "went through
+  // it live with the instructor" count as different from self-study.
+  const reportedSlideRef = useRef(-1);
+  const markedCompleteRef = useRef(false);
+  useEffect(() => {
+    if (isInstructor || !liveActive || !liveId || !myId) return;
+    if (index <= reportedSlideRef.current) return;
+    reportedSlideRef.current = index;
+
+    fetch(`/api/live-sessions/${liveId}/attend`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reachedSlide: index }),
+    });
+
+    if (index >= total - 1 && !markedCompleteRef.current) {
+      markedCompleteRef.current = true;
+      fetch("/api/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseSlug, moduleSlug, attendedLive: true }),
+      });
+    }
+  }, [index, isInstructor, liveActive, liveId, myId, total, courseSlug, moduleSlug]);
+
   const effectiveMaxRef = useRef(effectiveMax);
   useEffect(() => {
     effectiveMaxRef.current = effectiveMax;
@@ -114,6 +207,15 @@ export function SlideDeck({
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      // Don't hijack Space/Arrow/Home/End while the user is typing
+      // somewhere (e.g. the Q&A textarea) — those keys need to reach the
+      // input instead of flipping slides.
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) {
+        return;
+      }
+
       const max = effectiveMaxRef.current;
       if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") {
         e.preventDefault();
@@ -161,6 +263,26 @@ export function SlideDeck({
       if (res.ok) {
         const body = await res.json();
         setLive(body.session);
+      }
+    } finally {
+      setPending(false);
+    }
+  }
+
+  // Instructor: roll the whole live session forward to the next module,
+  // same room code, everyone currently following comes along automatically
+  // (see the room-scoped poll above, and /api/live-sessions/[id]/advance).
+  async function nextModule() {
+    if (!liveId || !nextModuleSlug) return;
+    setPending(true);
+    try {
+      const res = await fetch(`/api/live-sessions/${liveId}/advance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ moduleSlug: nextModuleSlug }),
+      });
+      if (res.ok) {
+        router.push(`/present/${courseSlug}/${nextModuleSlug}`);
       }
     } finally {
       setPending(false);
@@ -221,13 +343,29 @@ export function SlideDeck({
         {isInstructor && (
           <>
             {liveActive && ownedByMe ? (
-              <button
-                onClick={endLive}
-                disabled={pending}
-                className="flex items-center gap-1.5 rounded-lg border border-error/30 bg-error/10 px-2.5 py-1 text-xs font-medium text-error hover:bg-error/20 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                <Radio size={12} className="animate-pulse" /> End session
-              </button>
+              <>
+                <span className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-xs">
+                  <span className="text-muted">Room code</span>
+                  <span className="font-mono font-semibold tracking-wider">{live?.roomCode}</span>
+                </span>
+                {nextModuleSlug && index >= total - 1 && (
+                  <button
+                    onClick={nextModule}
+                    disabled={pending}
+                    title={nextModuleTitle ?? undefined}
+                    className="flex items-center gap-1.5 rounded-lg bg-accent px-2.5 py-1 text-xs font-medium text-accent-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
+                  >
+                    Next module <ArrowRight size={12} />
+                  </button>
+                )}
+                <button
+                  onClick={endLive}
+                  disabled={pending}
+                  className="flex items-center gap-1.5 rounded-lg border border-error/30 bg-error/10 px-2.5 py-1 text-xs font-medium text-error hover:bg-error/20 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <Radio size={12} className="animate-pulse" /> End session
+                </button>
+              </>
             ) : (
               <>
                 {liveActive && !ownedByMe && (
@@ -257,6 +395,7 @@ export function SlideDeck({
       </div>
 
       <LiveQA courseSlug={courseSlug} moduleSlug={moduleSlug} />
+      {liveActive && liveId && <LiveChat liveSessionId={liveId} />}
 
       <div className="relative flex items-center justify-center gap-6 px-6 pb-6">
         <span className="eyebrow absolute left-6 hidden sm:inline">{courseTitle}</span>

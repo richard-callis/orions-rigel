@@ -34,6 +34,7 @@ model User {
   exerciseAttempts     ExerciseAttempt[]
   lessonFeedback       LessonFeedback[]
   challengeSubmissions ChallengeSubmission[]
+  liveAttendances      LiveSessionAttendance[]
 }
 
 // One row per (user, lesson) once the user marks it complete.
@@ -43,6 +44,10 @@ model LessonProgress {
   courseSlug  String
   moduleSlug  String
   completedAt DateTime @default(now())
+  // Set when this completion came from following an instructor's live
+  // session through to the end (see LiveSessionAttendance), rather than
+  // self-paced study. Distinct credit — surfaced separately in the UI.
+  attendedLive Boolean @default(false)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -82,8 +87,61 @@ model LiveSession {
   // Timeline of slide changes for replay: [{ slideIndex, atMs }], atMs
   // relative to startedAt. Appended to on each currentSlide update.
   sessionEvents Json      @default("[]")
+  // Short human-typeable code (e.g. "BREW-42") for students to join by
+  // hand, Jackbox-style, in addition to the course-page "Join live" button.
+  // Unique only while a session is active — freed up once it ends so codes
+  // stay short instead of growing unbounded.
+  roomCode      String
+
+  attendances  LiveSessionAttendance[]
+  chatMessages LiveChatMessage[]
 
   @@index([courseSlug, moduleSlug, isActive])
+  @@unique([roomCode, isActive])
+}
+
+// Tracks who actually followed a specific live session, distinct from the
+// module-level LessonProgress row it ultimately produces. Lets us tell "sat
+// through the live session" apart from "read it solo afterward" even
+// though both end in a completed LessonProgress — and gives an instructor
+// a real attendance list per session.
+model LiveSessionAttendance {
+  id            String   @id @default(cuid())
+  liveSessionId String
+  userId        String
+  joinedAt      DateTime @default(now())
+  // Highest slide index this attendee has reached while following along —
+  // lets "completed" require having actually reached the final slide,
+  // not just having joined at some point and wandered off.
+  reachedSlide  Int      @default(0)
+  // Bumped on every presence heartbeat while the tab is open in Present
+  // Mode — "currently watching" (Twitch-style viewer count) is derived as
+  // lastSeenAt within the last ~30s, separate from total attendance which
+  // never shrinks once someone has joined.
+  lastSeenAt    DateTime @default(now())
+
+  liveSession LiveSession @relation(fields: [liveSessionId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([liveSessionId, userId])
+  @@index([userId])
+}
+
+// A chat message posted during a live session — the running Twitch-style
+// feed, distinct from LiveQuestion/LiveQuestionUpvote which is the curated,
+// upvoted "ask the instructor" queue. Chat is ephemeral noise by design; Q&A
+// is the signal that surfaces above it.
+model LiveChatMessage {
+  id            String   @id @default(cuid())
+  liveSessionId String
+  userId        String
+  userName      String
+  text          String
+  createdAt     DateTime @default(now())
+
+  liveSession LiveSession @relation(fields: [liveSessionId], references: [id], onDelete: Cascade)
+
+  @@index([liveSessionId, createdAt])
 }
 
 // One activation of a <Quiz id="..."> authored in a module's MDX content.

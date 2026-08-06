@@ -5,6 +5,8 @@ import { splitIntoSlides } from "@/lib/slides";
 import { Lesson } from "@/components/mdx/lesson";
 import { ReplayPlayer } from "@/components/present/replay-player";
 import { parseSessionEvents } from "@/lib/session-events";
+import { auth } from "@/lib/auth";
+import { canInstruct } from "@/lib/roles";
 
 type Props = {
   params: Promise<{ sessionId: string }>;
@@ -25,6 +27,16 @@ export default async function ReplayPage({ params }: Props) {
   const course = getCourse(session.courseSlug);
   const mod = getModule(session.courseSlug, session.moduleSlug);
   if (!course || !mod) notFound();
+
+  const viewerSession = await auth();
+  const isInstructor = canInstruct(viewerSession?.user?.role);
+  const attendance = isInstructor
+    ? await db.liveSessionAttendance.findMany({
+        where: { liveSessionId: sessionId },
+        select: { user: { select: { name: true } }, joinedAt: true, reachedSlide: true },
+        orderBy: { joinedAt: "asc" },
+      })
+    : [];
 
   const chunks = splitIntoSlides(mod.content);
   const slideProse = "prose prose-invert prose-lg md:prose-xl max-w-none prose-headings:font-semibold";
@@ -52,6 +64,15 @@ export default async function ReplayPage({ params }: Props) {
       events={events}
       durationMs={durationMs}
       isActive={session.isActive}
+      attendance={
+        isInstructor
+          ? attendance.map((a) => ({
+              name: a.user.name,
+              joinedAt: a.joinedAt.toISOString(),
+              reachedSlide: a.reachedSlide,
+            }))
+          : undefined
+      }
     />
   );
 }
