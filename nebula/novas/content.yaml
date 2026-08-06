@@ -1,0 +1,27 @@
+# A "content" Nova — course content lives in this repo (src/content) but is
+# never baked into the Docker image (see Dockerfile: it copies public/.next/
+# src/generated/prisma/etc, never src/content). Instead it's synced by ORION
+# from this file, through a Nebula pointing at this repo, into a PVC that the
+# technical-training Deployment mounts read-only at src/content. Editing a
+# .mdx file here and merging to main is enough to update prod — no rebuild.
+name: technical-training-course-content
+displayName: Technical Training — Course Content
+description: >-
+  File-based MDX course content (SQL Boot Camp, Kubernetes Fundamentals, and
+  any course added under src/content/courses) for the technical-training app.
+type: content
+category: DevTools
+tags:
+  - technical-training
+  - course-content
+
+contentSource:
+  gitUrl: https://github.com/richard-callis/orions-rigel.git
+  branch: main
+  path: src/content
+
+contentTarget:
+  namespace: apps
+  deployment: technical-training
+  mountPath: src/content
+  pvcSizeGi: 1
