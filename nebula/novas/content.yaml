@@ -23,5 +23,7 @@ contentSource:
 contentTarget:
   namespace: apps
   deployment: technical-training
-  mountPath: src/content
+  # Must be absolute — a volumeMount path is inside the container's rootfs,
+  # not relative to WORKDIR. Matches this app's actual /app working directory.
+  mountPath: /app/src/content
   pvcSizeGi: 1
