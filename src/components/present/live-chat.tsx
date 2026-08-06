@@ -14,7 +14,13 @@ type ChatMessage = {
 // The running Twitch-style chat feed + live viewer count for a session.
 // Separate from LiveQA (the curated, upvoted question queue) — this is the
 // unfiltered firehose alongside the slides.
-export function LiveChat({ liveSessionId }: { liveSessionId: string }) {
+export function LiveChat({
+  liveSessionId,
+  isInstructor,
+}: {
+  liveSessionId: string;
+  isInstructor: boolean;
+}) {
   const { data: authSession } = useSession();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -24,9 +30,13 @@ export function LiveChat({ liveSessionId }: { liveSessionId: string }) {
   const listRef = useRef<HTMLDivElement>(null);
   const lastTimestampRef = useRef<string | null>(null);
 
-  // Presence heartbeat — keeps this viewer counted as "watching."
+  // Presence heartbeat — keeps this viewer counted as "watching." The
+  // instructor is never a "viewer" of their own session (and crucially,
+  // presence rows feed into attendedLive credit and the attendance list —
+  // see /api/live-sessions/[id]/advance — so heartbeating here would give
+  // the instructor bogus "completed live" credit on every module).
   useEffect(() => {
-    if (!authSession?.user) return;
+    if (!authSession?.user || isInstructor) return;
     let ignore = false;
     async function beat() {
       if (!ignore) {
@@ -39,7 +49,7 @@ export function LiveChat({ liveSessionId }: { liveSessionId: string }) {
       ignore = true;
       clearInterval(interval);
     };
-  }, [liveSessionId, authSession?.user]);
+  }, [liveSessionId, authSession?.user, isInstructor]);
 
   // Poll the viewer count regardless of chat panel open/closed.
   useEffect(() => {

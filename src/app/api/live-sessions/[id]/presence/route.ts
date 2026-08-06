@@ -18,6 +18,21 @@ export async function POST(_request: Request, { params }: Props) {
 
   const { id: liveSessionId } = await params;
 
+  const liveSession = await db.liveSession.findUnique({
+    where: { id: liveSessionId },
+    select: { instructorId: true },
+  });
+  if (!liveSession) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  // The instructor is never counted as a viewer of their own session — a
+  // heartbeat from them would otherwise flow into attendedLive credit and
+  // the attendance list (see /api/live-sessions/[id]/advance). The client
+  // already avoids sending this, but don't rely on that alone.
+  if (liveSession.instructorId === session.user.id) {
+    return NextResponse.json({ ok: true });
+  }
+
   await db.liveSessionAttendance.upsert({
     where: { liveSessionId_userId: { liveSessionId, userId: session.user.id } },
     create: { liveSessionId, userId: session.user.id },

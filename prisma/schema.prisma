@@ -90,14 +90,20 @@ model LiveSession {
   // Short human-typeable code (e.g. "BREW-42") for students to join by
   // hand, Jackbox-style, in addition to the course-page "Join live" button.
   // Unique only while a session is active — freed up once it ends so codes
-  // stay short instead of growing unbounded.
+  // stay short instead of growing unbounded. Prisma's declarative @@unique
+  // can't express "unique WHERE isActive" (it would also forbid two ended
+  // sessions from ever sharing a code, which happens constantly once a
+  // course has run more than once) — the real constraint is a Postgres
+  // partial unique index created by hand in the migration SQL. Uniqueness
+  // is additionally enforced at the application layer (see the retry loop
+  // in /api/live-sessions POST and /api/live-sessions/[id]/advance).
   roomCode      String
 
   attendances  LiveSessionAttendance[]
   chatMessages LiveChatMessage[]
 
   @@index([courseSlug, moduleSlug, isActive])
-  @@unique([roomCode, isActive])
+  @@index([roomCode, isActive])
 }
 
 // Tracks who actually followed a specific live session, distinct from the

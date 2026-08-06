@@ -28,6 +28,11 @@ export async function POST(request: Request, { params }: Props) {
   if (!liveSession) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  // Same reasoning as /presence: the instructor never earns attendance
+  // credit on their own session.
+  if (liveSession.instructorId === session.user.id) {
+    return NextResponse.json({ ok: true });
+  }
 
   const { reachedSlide } = parsed.data;
 

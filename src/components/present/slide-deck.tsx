@@ -73,7 +73,10 @@ export function SlideDeck({
   // is stable across the instructor advancing to the next module (see
   // /api/live-sessions/[id]/advance), while courseSlug+moduleSlug is not.
   // This is what lets viewers follow module-to-module without re-joining.
-  const knownRoomCodeRef = useRef<string | null>(null);
+  // A real state (not just a ref) so losing the room — the session ended —
+  // properly re-arms the module-scoped poll below to notice a *new*
+  // session starting, instead of latching onto a dead room forever.
+  const [roomCode, setRoomCode] = useState<string | null>(null);
 
   // Poll the module's live session. This is the entry-point poll — it's
   // how a viewer first discovers a session on the module they opened —
@@ -89,11 +92,9 @@ export function SlideDeck({
       );
       if (res.ok && !ignore) {
         const body = await res.json();
-        if (!knownRoomCodeRef.current) {
+        if (!roomCode) {
           setLive(body.session);
-        }
-        if (body.session?.roomCode) {
-          knownRoomCodeRef.current = body.session.roomCode;
+          if (body.session?.roomCode) setRoomCode(body.session.roomCode);
         }
         setCheckedLive(true);
       }
@@ -104,14 +105,18 @@ export function SlideDeck({
       ignore = true;
       clearInterval(interval);
     };
-  }, [courseSlug, moduleSlug]);
+  }, [courseSlug, moduleSlug, roomCode]);
 
   // Room-scoped poll: once we know the roomCode, this is authoritative.
   // For non-instructors, if the session's moduleSlug has moved on from
   // this page's moduleSlug (the instructor advanced), navigate to follow —
-  // same room, no re-join, no new code.
+  // same room, no re-join, no new code. If the room goes dark (session
+  // ended, no successor yet), clear roomCode so the module-scoped poll
+  // above resumes looking for a *new* session instead of a viewer being
+  // stuck on "waiting for the instructor" forever with no way to recover
+  // short of a manual reload.
+  const redirectedToRef = useRef<string | null>(null);
   useEffect(() => {
-    const roomCode = knownRoomCodeRef.current;
     if (!roomCode) return;
 
     let ignore = false;
@@ -122,10 +127,18 @@ export function SlideDeck({
       const session = body.session as LiveSessionState;
       if (!session) {
         setLive(null);
+        setRoomCode(null);
+        redirectedToRef.current = null;
         return;
       }
       if (!isInstructor && session.moduleSlug !== moduleSlug) {
-        router.push(`/present/${session.courseSlug}/${session.moduleSlug}`);
+        // Only fire the navigation once per destination — router.push not
+        // completing yet (still on this poll tick) shouldn't cause a
+        // second push to the same target every 2.5s.
+        if (redirectedToRef.current !== session.moduleSlug) {
+          redirectedToRef.current = session.moduleSlug;
+          router.push(`/present/${session.courseSlug}/${session.moduleSlug}`);
+        }
         return;
       }
       setLive(session);
@@ -136,8 +149,7 @@ export function SlideDeck({
       ignore = true;
       clearInterval(interval);
     };
-    // Re-runs once knownRoomCodeRef gets set via `live` changing.
-  }, [live?.roomCode, isInstructor, moduleSlug, router]);
+  }, [roomCode, isInstructor, moduleSlug, router]);
 
   // Instructor: push local slide changes up as the source of truth.
   useEffect(() => {
@@ -395,7 +407,7 @@ export function SlideDeck({
       </div>
 
       <LiveQA courseSlug={courseSlug} moduleSlug={moduleSlug} />
-      {liveActive && liveId && <LiveChat liveSessionId={liveId} />}
+      {liveActive && liveId && <LiveChat liveSessionId={liveId} isInstructor={isInstructor} />}
 
       <div className="relative flex items-center justify-center gap-6 px-6 pb-6">
         <span className="eyebrow absolute left-6 hidden sm:inline">{courseTitle}</span>

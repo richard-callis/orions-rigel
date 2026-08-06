@@ -8,12 +8,20 @@ type Props = { params: Promise<{ id: string }> };
 
 const advanceSchema = z.object({ moduleSlug: z.string().min(1) });
 
+// Only carry forward / credit attendees who were actually present in the
+// last stretch of the module, not everyone who ever joined the room —
+// otherwise someone who typed the code, watched 30 seconds of module 1,
+// and closed the tab would silently ride along (and get credited) through
+// every subsequent module for the rest of the course. Matches the
+// "currently watching" window used by /api/live-sessions/[id]/presence.
+const RECENCY_WINDOW_MS = 30_000;
+
 // Moves a live session forward to the next module in the course, in one
 // atomic step: ends the current module's session and starts a new one for
 // the next module, reusing the SAME roomCode and instructorId, and copying
-// every current attendee over immediately. This is what lets a class move
-// module-to-module without students re-joining or re-typing a code — see
-// slide-deck.tsx's auto-follow effect, which detects the handoff via
+// currently-engaged attendees over immediately. This is what lets a class
+// move module-to-module without students re-joining or re-typing a code —
+// see slide-deck.tsx's auto-follow effect, which detects the handoff via
 // /api/live-sessions/by-room.
 export async function POST(request: Request, { params }: Props) {
   const authSession = await auth();
@@ -29,7 +37,11 @@ export async function POST(request: Request, { params }: Props) {
 
   const existing = await db.liveSession.findFirst({
     where: { id, instructorId: authSession.user.id, isActive: true },
-    include: { attendances: true },
+    include: {
+      attendances: {
+        where: { lastSeenAt: { gte: new Date(Date.now() - RECENCY_WINDOW_MS) } },
+      },
+    },
   });
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -48,8 +60,9 @@ export async function POST(request: Request, { params }: Props) {
     });
 
     // Collective credit: the class moved on as a group, so everyone who was
-    // following gets the module marked complete even if their own client
-    // hadn't individually paged to its last slide yet.
+    // actively following (recent heartbeat, filtered above) gets the
+    // module marked complete even if their own client hadn't individually
+    // paged to its last slide yet.
     if (existing.attendances.length > 0) {
       await tx.lessonProgress.createMany({
         data: existing.attendances.map((a) => ({
@@ -74,6 +87,11 @@ export async function POST(request: Request, { params }: Props) {
 
     // Mirror goLive()'s "only one live session per module" invariant in
     // case something else was already live on the destination module.
+    // (updateMany-then-create isn't a true atomicity guarantee against a
+    // *concurrent* transaction doing the same thing outside this one, but
+    // since Postgres serializes writes to the affected rows here within
+    // this transaction, this is enough to prevent orphaning our own
+    // pre-existing session on that module.)
     await tx.liveSession.updateMany({
       where: { courseSlug: existing.courseSlug, moduleSlug: nextModule.slug, isActive: true },
       data: { isActive: false, endedAt: new Date() },
