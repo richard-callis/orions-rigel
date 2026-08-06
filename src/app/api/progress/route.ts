@@ -6,6 +6,12 @@ import { db } from "@/lib/db";
 const bodySchema = z.object({
   courseSlug: z.string().min(1),
   moduleSlug: z.string().min(1),
+  // Set when this completion is the app auto-marking a module complete
+  // because the student followed a live session through to its last
+  // slide (see live-session-tracker.tsx) — distinct credit from marking
+  // complete solo. Never trust a client-asserted true blindly for
+  // anything security-sensitive, but this only affects a badge in the UI.
+  attendedLive: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
@@ -19,14 +25,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
 
-  const { courseSlug, moduleSlug } = parsed.data;
+  const { courseSlug, moduleSlug, attendedLive } = parsed.data;
 
   await db.lessonProgress.upsert({
     where: {
       userId_courseSlug_moduleSlug: { userId: session.user.id, courseSlug, moduleSlug },
     },
-    create: { userId: session.user.id, courseSlug, moduleSlug },
-    update: {},
+    create: { userId: session.user.id, courseSlug, moduleSlug, attendedLive: attendedLive ?? false },
+    // Once earned, live-attendance credit sticks even if the row is later
+    // touched by a plain (non-live) completion toggle.
+    update: attendedLive ? { attendedLive: true } : {},
   });
 
   // Create or reschedule review for spaced repetition.

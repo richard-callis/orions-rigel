@@ -3,15 +3,28 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { canInstruct } from "@/lib/roles";
+import { generateRoomCode } from "@/lib/room-code";
 
 // Poll target for the presentation deck — both the instructor (to resume
 // their own session or notice a conflicting one) and viewers (to cap
 // forward navigation) hit this. Pass history=true to instead list past
-// (ended) sessions for the module, for the replay list.
+// (ended) sessions for the module, for the replay list. With no
+// courseSlug/moduleSlug at all, lists every currently-live session across
+// every course — this is what the site-wide "live now" banner polls.
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const courseSlug = url.searchParams.get("courseSlug");
   const moduleSlug = url.searchParams.get("moduleSlug");
+
+  if (!courseSlug && !moduleSlug) {
+    const sessions = await db.liveSession.findMany({
+      where: { isActive: true },
+      select: { id: true, courseSlug: true, moduleSlug: true, roomCode: true, startedAt: true },
+      orderBy: { startedAt: "desc" },
+    });
+    return NextResponse.json({ sessions });
+  }
+
   if (!courseSlug || !moduleSlug) {
     return NextResponse.json({ error: "courseSlug and moduleSlug are required" }, { status: 400 });
   }
@@ -57,9 +70,18 @@ export async function POST(request: Request) {
     data: { isActive: false, endedAt: new Date() },
   });
 
-  const session = await db.liveSession.create({
-    data: { courseSlug, moduleSlug, instructorId: authSession.user.id },
-  });
+  // roomCode is only unique among isActive sessions (see schema), so a
+  // handful of retries on collision is enough in practice.
+  let session = null;
+  for (let attempt = 0; attempt < 5 && !session; attempt++) {
+    try {
+      session = await db.liveSession.create({
+        data: { courseSlug, moduleSlug, instructorId: authSession.user.id, roomCode: generateRoomCode() },
+      });
+    } catch (err: unknown) {
+      if (attempt === 4) throw err;
+    }
+  }
 
   return NextResponse.json({ session });
 }

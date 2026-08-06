@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getAnyCourse, getAnyModule } from "@/lib/content";
+import { getAnyCourse, getAnyModule, getAnyModuleNeighbors } from "@/lib/content";
 import { splitIntoSlides } from "@/lib/slides";
 import { Lesson } from "@/components/mdx/lesson";
 import { SlideDeck } from "@/components/present/slide-deck";
@@ -25,6 +25,7 @@ export default async function PresentPage({ params }: Props) {
 
   const session = await auth();
   const isInstructor = canInstruct(session?.user?.role);
+  const { next: nextModule } = await getAnyModuleNeighbors(courseSlug, moduleSlug);
 
   const chunks = splitIntoSlides(mod.content);
   const slideProse = "prose prose-invert prose-lg md:prose-xl max-w-none prose-headings:font-semibold";
@@ -41,6 +42,12 @@ export default async function PresentPage({ params }: Props) {
 
   return (
     <SlideDeck
+      // Force a full remount on module change — this page is reached both
+      // by normal navigation and by a live-session module handoff (see
+      // slide-deck.tsx's room-scoped poll), and per-module local state
+      // (current slide index, "have I reported attendance yet" refs) must
+      // not carry over from the previous module in either case.
+      key={moduleSlug}
       slides={slides}
       title={mod.meta.title}
       courseTitle={course.title}
@@ -48,6 +55,8 @@ export default async function PresentPage({ params }: Props) {
       courseSlug={courseSlug}
       moduleSlug={moduleSlug}
       isInstructor={isInstructor}
+      nextModuleSlug={nextModule?.slug ?? null}
+      nextModuleTitle={nextModule?.title ?? null}
     />
   );
 }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Check, Circle } from "lucide-react";
+import { Check, Circle, Radio } from "lucide-react";
 import { getAnyCourse, getAnyCourseModules } from "@/lib/content";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
@@ -30,13 +30,21 @@ export default async function CourseOverviewPage({ params }: Props) {
 
   const session = await auth();
   let completedSlugs = new Set<string>();
+  let liveAttendedSlugs = new Set<string>();
   if (session?.user) {
     const rows = await db.lessonProgress.findMany({
       where: { userId: session.user.id, courseSlug },
-      select: { moduleSlug: true },
+      select: { moduleSlug: true, attendedLive: true },
     });
     completedSlugs = new Set(rows.map((r) => r.moduleSlug));
+    liveAttendedSlugs = new Set(rows.filter((r) => r.attendedLive).map((r) => r.moduleSlug));
   }
+
+  const liveSessions = await db.liveSession.findMany({
+    where: { courseSlug, isActive: true },
+    select: { moduleSlug: true, roomCode: true },
+  });
+  const liveModuleSlugs = new Map(liveSessions.map((s) => [s.moduleSlug, s.roomCode]));
 
   return (
     <div className="w-full mx-auto max-w-3xl px-4 py-12">
@@ -53,30 +61,48 @@ export default async function CourseOverviewPage({ params }: Props) {
       <ol className="space-y-2">
         {modules.map((mod) => {
           const done = completedSlugs.has(mod.slug);
+          const attendedLive = liveAttendedSlugs.has(mod.slug);
+          const roomCode = liveModuleSlugs.get(mod.slug);
           return (
             <li key={mod.slug}>
-              <Link
-                href={`/courses/${courseSlug}/${mod.slug}`}
-                className="flex items-center gap-3 rounded-xl border border-border bg-surface p-4 hover:border-accent transition-colors"
+              <div
+                className={`flex items-center gap-3 rounded-xl border p-4 transition-colors ${
+                  roomCode ? "border-error/30 bg-error/5" : "border-border bg-surface hover:border-accent"
+                }`}
               >
-                {done ? (
-                  <Check size={18} className="text-success shrink-0" />
-                ) : (
-                  <Circle size={18} className="text-border shrink-0" />
-                )}
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{mod.title}</span>
-                    <span className="eyebrow">{LEVEL_LABEL[mod.level] ?? mod.level}</span>
-                  </div>
-                  {mod.description && (
-                    <p className="text-sm text-foreground-secondary">{mod.description}</p>
+                <Link
+                  href={`/courses/${courseSlug}/${mod.slug}`}
+                  className="flex flex-1 items-center gap-3 min-w-0"
+                >
+                  {done ? (
+                    <Check size={18} className="text-success shrink-0" />
+                  ) : (
+                    <Circle size={18} className="text-border shrink-0" />
                   )}
-                </div>
-                {mod.duration && (
-                  <span className="text-xs text-muted shrink-0 font-mono">{mod.duration}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium">{mod.title}</span>
+                      <span className="eyebrow">{LEVEL_LABEL[mod.level] ?? mod.level}</span>
+                      {attendedLive && <span className="eyebrow text-accent">Completed live</span>}
+                    </div>
+                    {mod.description && (
+                      <p className="text-sm text-foreground-secondary">{mod.description}</p>
+                    )}
+                  </div>
+                </Link>
+                {roomCode ? (
+                  <Link
+                    href={`/present/${courseSlug}/${mod.slug}`}
+                    className="flex items-center gap-1.5 shrink-0 rounded-full bg-error/10 px-3 py-1.5 text-xs font-medium text-error hover:bg-error/20 transition-colors"
+                  >
+                    <Radio size={10} className="animate-pulse" /> Live now · {roomCode}
+                  </Link>
+                ) : (
+                  mod.duration && (
+                    <span className="text-xs text-muted shrink-0 font-mono">{mod.duration}</span>
+                  )
                 )}
-              </Link>
+              </div>
             </li>
           );
         })}
