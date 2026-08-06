@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { canInstruct } from "@/lib/roles";
 import { generateRoomCode } from "@/lib/room-code";
+import { getAnyCourseModules } from "@/lib/content";
 
 // Poll target for the presentation deck — both the instructor (to resume
 // their own session or notice a conflicting one) and viewers (to cap
@@ -63,6 +64,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
   const { courseSlug, moduleSlug } = parsed.data;
+
+  // Reject a nonexistent module up front — otherwise a mistyped/stale slug
+  // silently creates a session that can never be found by /present/[course]/
+  // [module], and /advance's own module-list check would make leaving this
+  // module fail to credit attendedLive with no error surfaced anywhere.
+  const modules = await getAnyCourseModules(courseSlug);
+  if (!modules.some((m) => m.slug === moduleSlug)) {
+    return NextResponse.json({ error: "Module not found in this course" }, { status: 400 });
+  }
 
   // Only one live session per module at a time.
   await db.liveSession.updateMany({
