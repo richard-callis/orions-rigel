@@ -35,7 +35,7 @@ services:
       # Required — no default. A well-known fallback here would let anyone forge a
       # session JWT for any user (including ADMIN), since Auth.js trusts token.id as
       # authoritative. Generate one with: openssl rand -base64 32
-      AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set — generate one with: openssl rand -base64 32}
+      AUTH_SECRET: "${AUTH_SECRET:?AUTH_SECRET must be set. Generate one with 'openssl rand -base64 32'}"
       # Needed so Auth.js trusts the host/proto it's reached through when
       # sitting behind a reverse proxy or load balancer (see README).
       AUTH_TRUST_HOST: "true"

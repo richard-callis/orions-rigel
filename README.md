@@ -52,11 +52,13 @@ sudo -u postgres psql -c "CREATE DATABASE technical_training OWNER training_app;
 sudo -u postgres psql -c "ALTER USER training_app CREATEDB;" # needed for prisma migrate's shadow database
 ```
 
-Copy `.env.example` to `.env` and adjust `DATABASE_URL` if you used different
-credentials, then run the migration:
+Copy `.env.example` to `.env`, adjust `DATABASE_URL` if you used different
+credentials, and set `AUTH_SECRET` (required — Auth.js won't start without
+it), then run the migration:
 
 ```bash
 cp .env.example .env
+sed -i "s|AUTH_SECRET=\"\"|AUTH_SECRET=\"$(openssl rand -base64 32)\"|" .env
 npx prisma migrate dev
 ```
 
