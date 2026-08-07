@@ -52,11 +52,13 @@ sudo -u postgres psql -c "CREATE DATABASE technical_training OWNER training_app;
 sudo -u postgres psql -c "ALTER USER training_app CREATEDB;" # needed for prisma migrate's shadow database
 ```
 
-Copy `.env.example` to `.env` and adjust `DATABASE_URL` if you used different
-credentials, then run the migration:
+Copy `.env.example` to `.env`, adjust `DATABASE_URL` if you used different
+credentials, and set `AUTH_SECRET` (required — Auth.js won't start without
+it), then run the migration:
 
 ```bash
 cp .env.example .env
+sed -i "s|AUTH_SECRET=\"\"|AUTH_SECRET=\"$(openssl rand -base64 32)\"|" .env
 npx prisma migrate dev
 ```
 
@@ -155,15 +157,15 @@ docker build -t technical-training .
 ### Docker Compose (single host)
 
 ```bash
-cp .env.example .env   # only AUTH_SECRET is read from here by compose; see below
+export AUTH_SECRET="$(openssl rand -base64 32)"
 docker compose up --build
 ```
 
 This starts Postgres, runs `prisma migrate deploy` once (the `migrate`
 service), then starts the app on [http://localhost:3000](http://localhost:3000).
-Compose reads `AUTH_SECRET` from your shell environment (falling back to a
-dev-only default) — `export AUTH_SECRET="$(openssl rand -base64 32)"` before
-`docker compose up` for anything beyond local testing.
+`AUTH_SECRET` is required — Compose reads it from your shell environment (or
+a `.env` file, `cp .env.example .env` then fill it in) and refuses to start
+without it, since Auth.js uses it to sign session JWTs.
 
 ### Kubernetes
 

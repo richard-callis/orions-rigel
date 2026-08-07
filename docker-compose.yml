@@ -32,8 +32,10 @@ services:
       - "3000:3000"
     environment:
       DATABASE_URL: postgresql://training_app:training_dev_password@db:5432/technical_training?schema=public
-      # Generate a real one for anything beyond local dev: openssl rand -base64 32
-      AUTH_SECRET: ${AUTH_SECRET:-dev-only-secret-change-me-1234567890abcdef}
+      # Required — no default. A well-known fallback here would let anyone forge a
+      # session JWT for any user (including ADMIN), since Auth.js trusts token.id as
+      # authoritative. Generate one with: openssl rand -base64 32
+      AUTH_SECRET: "${AUTH_SECRET:?AUTH_SECRET must be set. Generate one with 'openssl rand -base64 32'}"
       # Needed so Auth.js trusts the host/proto it's reached through when
       # sitting behind a reverse proxy or load balancer (see README).
       AUTH_TRUST_HOST: "true"
