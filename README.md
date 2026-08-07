@@ -155,15 +155,15 @@ docker build -t technical-training .
 ### Docker Compose (single host)
 
 ```bash
-cp .env.example .env   # only AUTH_SECRET is read from here by compose; see below
+export AUTH_SECRET="$(openssl rand -base64 32)"
 docker compose up --build
 ```
 
 This starts Postgres, runs `prisma migrate deploy` once (the `migrate`
 service), then starts the app on [http://localhost:3000](http://localhost:3000).
-Compose reads `AUTH_SECRET` from your shell environment (falling back to a
-dev-only default) — `export AUTH_SECRET="$(openssl rand -base64 32)"` before
-`docker compose up` for anything beyond local testing.
+`AUTH_SECRET` is required — Compose reads it from your shell environment (or
+a `.env` file, `cp .env.example .env` then fill it in) and refuses to start
+without it, since Auth.js uses it to sign session JWTs.
 
 ### Kubernetes
 
