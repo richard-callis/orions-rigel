@@ -3,13 +3,10 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { DUMMY_HASH } from "@/lib/password";
 
 const LOGIN_RATE_LIMIT = 10;
 const LOGIN_RATE_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
-
-// A hash of a value nobody will ever type, used to keep authorize()'s timing shape identical
-// on the "no such user" path — see the comment at its call site below.
-const DUMMY_HASH = "$2a$10$CwTycUXWue0Thq9StjUM0uJ8u1yAaTz1AhBhCk8V9zN7YbfxJlPAy";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },

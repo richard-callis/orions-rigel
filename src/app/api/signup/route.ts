@@ -6,6 +6,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { Role } from "@/generated/prisma/enums";
 import { lockAdminCount } from "@/lib/admin-guard";
 import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { BCRYPT_COST } from "@/lib/password";
 
 const SIGNUP_RATE_LIMIT = 5;
 const SIGNUP_RATE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
@@ -61,9 +62,11 @@ export async function POST(request: Request) {
   }
 
   const { name, email, password } = parsed.data;
-  // Hash outside the transaction — bcrypt is deliberately slow (~250ms at cost 12), and holding
+  // Hash outside the transaction — bcrypt is deliberately slow (~250ms at this cost), and holding
   // the admin-count advisory lock for that long would serialize every concurrent signup on it.
-  const passwordHash = await bcrypt.hash(password, 12);
+  // BCRYPT_COST is shared with lib/password.ts's DUMMY_HASH — a cost mismatch between the two
+  // reopens the login timing oracle DUMMY_HASH exists to close.
+  const passwordHash = await bcrypt.hash(password, BCRYPT_COST);
 
   try {
     const user = await db.$transaction(async (tx) => {
