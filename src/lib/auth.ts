@@ -2,6 +2,11 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+import { DUMMY_HASH } from "@/lib/password";
+
+const LOGIN_RATE_LIMIT = 10;
+const LOGIN_RATE_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
@@ -14,18 +19,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const email = credentials?.email;
         const password = credentials?.password;
         if (typeof email !== "string" || typeof password !== "string") {
           return null;
         }
 
-        const user = await db.user.findUnique({ where: { email: email.toLowerCase() } });
-        if (!user) return null;
+        // Enforced before the DB lookup / bcrypt.compare so repeated failed attempts don't get
+        // to spend a bcrypt call's worth of CPU each time.
+        const ip = getClientIp(request);
+        if (!checkRateLimit(`login:${ip}`, LOGIN_RATE_LIMIT, LOGIN_RATE_WINDOW_MS)) {
+          return null;
+        }
 
-        const valid = await bcrypt.compare(password, user.passwordHash);
-        if (!valid) return null;
+        const user = await db.user.findUnique({ where: { email: email.toLowerCase() } });
+        // Run a dummy bcrypt.compare even when the user doesn't exist, so "no such user" and
+        // "wrong password" take the same amount of time — otherwise the early return here is a
+        // timing oracle an attacker can use to enumerate valid emails.
+        const valid = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
+        if (!user || !valid) return null;
 
         return { id: user.id, name: user.name, email: user.email, role: user.role };
       },
