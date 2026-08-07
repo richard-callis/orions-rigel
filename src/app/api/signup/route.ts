@@ -5,6 +5,10 @@ import { db } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
 import { Role } from "@/generated/prisma/enums";
 import { lockAdminCount } from "@/lib/admin-guard";
+import { checkRateLimit, getClientIp } from "@/lib/rate-limit";
+
+const SIGNUP_RATE_LIMIT = 5;
+const SIGNUP_RATE_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
 
 const signupSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(100),
@@ -36,6 +40,16 @@ async function roleFor(email: string, tx: Prisma.TransactionClient): Promise<Rol
 }
 
 export async function POST(request: Request) {
+  // Enforced before touching the DB or hashing anything, so mass fake-account creation (which
+  // also amplifies the admin-bootstrap race window above) can't run unbounded.
+  const ip = getClientIp(request);
+  if (!checkRateLimit(`signup:${ip}`, SIGNUP_RATE_LIMIT, SIGNUP_RATE_WINDOW_MS)) {
+    return NextResponse.json(
+      { error: "Too many signup attempts. Try again later." },
+      { status: 429 }
+    );
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = signupSchema.safeParse(body);
 
